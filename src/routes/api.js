@@ -15,6 +15,10 @@ function baseUrl(req) {
   return `${req.protocol}://${req.get('host')}`;
 }
 
+// Express 4 needs async throws handed to next() explicitly, or they escape as
+// unhandled rejections and take the process with them.
+const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
 /* ------------------------------- auth ---------------------------------- */
 
 router.post('/api/auth/login', (req, res) => {
@@ -68,7 +72,7 @@ router.get('/api/state', requireBearer, (req, res) => {
 
 /* ------------------------------- links --------------------------------- */
 
-router.post('/api/links', requireBearer, async (req, res) => {
+router.post('/api/links', requireBearer, wrap(async (req, res) => {
   const { intent, resource_id } = req.body || {};
   const issued = issueToken({ intentKey: intent, resourceId: resource_id, actor: req.user.id });
   if (issued.error) return res.status(409).json({ error: issued.error });
@@ -88,7 +92,7 @@ router.post('/api/links', requireBearer, async (req, res) => {
     url: msg.url,
     message_id: msg.id
   });
-});
+}));
 
 router.post('/api/tokens/:id/revoke', requireBearer, (req, res) => {
   const out = revokeToken(req.params.id, 'ops_manual');

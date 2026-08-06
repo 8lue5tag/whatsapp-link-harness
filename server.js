@@ -26,6 +26,22 @@ app.use(require('./src/routes/seller'));
 
 app.use((req, res) => res.status(404).json({ error: 'not_found', path: req.path }));
 
+// Express 4 does not catch throws from async handlers, so one rejected promise
+// would otherwise kill the process - and a dead process turns every WhatsApp CTA
+// into a 404 that looks exactly like an expired token. Log loudly, keep serving.
+app.use((err, req, res, next) => {
+  console.error(`[error] ${req.method} ${req.path}:`, err && err.stack ? err.stack : err);
+  if (res.headersSent) return next(err);
+  res.status(500).json({ error: 'server_error', detail: String((err && err.message) || err) });
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[unhandledRejection]', reason && reason.stack ? reason.stack : reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[uncaughtException]', err && err.stack ? err.stack : err);
+});
+
 app.listen(PORT, () => {
   console.log(`\n  WhatsApp link-token harness`);
   console.log(`  console : http://localhost:${PORT}/`);

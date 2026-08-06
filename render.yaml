@@ -3,7 +3,9 @@
 # template freezes forever, so settle it before submitting any template.
 services:
   - type: web
-    name: rapidue-link-harness
+    # Do not rename: https://whatsapp-link-harness.onrender.com/s/{{1}} is frozen
+    # into an approved Meta template button and cannot be edited after approval.
+    name: whatsapp-link-harness
     runtime: node
     plan: free
     region: singapore

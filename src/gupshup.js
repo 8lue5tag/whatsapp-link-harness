@@ -72,6 +72,8 @@ function interpretEnterprise(text) {
   }
 }
 
+const SEND_TIMEOUT_MS = 15000;
+
 async function postForm(url, params, headers, httpMethod) {
   let res, text;
   const useGet = httpMethod === 'GET';
@@ -83,7 +85,9 @@ async function postForm(url, params, headers, httpMethod) {
         ...(useGet ? {} : { 'content-type': 'application/x-www-form-urlencoded' }),
         ...(headers || {})
       },
-      ...(useGet ? {} : { body: new URLSearchParams(params) })
+      ...(useGet ? {} : { body: new URLSearchParams(params) }),
+      // A vendor that never answers must not be able to wedge the request.
+      signal: AbortSignal.timeout(SEND_TIMEOUT_MS)
     });
     text = await res.text();
   } catch (err) {

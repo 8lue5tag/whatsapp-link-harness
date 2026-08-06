@@ -37,7 +37,9 @@ router.get('/s/:token', (req, res) => {
  * The dead-link page's only button. Looks the old token up by hash (whatever its
  * status), and issues a fresh one for the same seller / intent / resource.
  */
-router.post('/api/link/resend', express.json(), async (req, res) => {
+const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
+router.post('/api/link/resend', express.json(), wrap(async (req, res) => {
   const secret = (req.body && req.body.t) || '';
   const row = db().tokens.find((t) => t.token_hash === hashToken(secret));
   if (!row) return res.status(404).json({ error: 'unknown_token' });
@@ -54,7 +56,7 @@ router.post('/api/link/resend', express.json(), async (req, res) => {
     note: 'resent from dead-link page'
   });
   res.json({ ok: true, message_id: msg.id, wa_id: issued.seller.wa_id });
-});
+}));
 
 /** Context for the dead-link page, so it can name the task without leaking much. */
 router.get('/api/link/context', (req, res) => {
