@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Rapidue</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+<div class="landing">
+  <div id="root" class="muted">Checking your link…</div>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let S = null;
+
+async function call(path, body) {
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body || {})
+  });
+  const out = await res.json().catch(() => ({}));
+  if (!res.ok) throw Object.assign(new Error(out.error || res.statusText), { body: out });
+  return out;
+}
+
+function dead(state) {
+  document.body.innerHTML = `
+    <div class="landing">
+      <div class="banner dead">
+        <h2 style="margin:0 0 4px">Your session timed out</h2>
+        <p class="muted" style="margin:0">
+          ${state === 'absolute_expired'
+            ? 'This session hit its maximum length.'
+            : 'You were away for a while, so we signed you out of this task.'}
+        </p>
+      </div>
+      <p class="muted small">Tap the button in your WhatsApp message again — if the link is still within its window, it will let you straight back in.</p>
+    </div>`;
+}
+
+function shell(inner) {
+  const idle = Math.max(0, Math.round(S.idle_ms_left / 1000));
+  $('#root').innerHTML = `
+    <div class="banner warn">
+      <div class="row" style="justify-content:space-between">
+        <div>
+          <strong>${esc(S.seller.name)}</strong>
+          <span class="muted small"> +${esc(S.seller.wa_id)}</span>
+        </div>
+        <div class="small muted">
+          scope: <span class="mono">${esc(S.intent)} / ${esc(S.resource_id)}</span>
+        </div>
+      </div>
+      <div class="small muted" style="margin-top:4px">
+        Signs you out after <strong id="idle">${idle}s</strong> of inactivity — every save pushes it back out.
+        Hard cap ${Math.round(S.absolute_ms_left / 60000)}m.
+      </div>
+    </div>
+    <div class="panel"><h2>${esc(S.intent_label)}</h2><div class="body">${inner}</div></div>
+    <p class="small muted">This page can only touch ${esc(S.resource_id)}. Any other listing returns 403 even with a valid session.</p>`;
+}
+
+function renderListingDraft() {
+  const l = S.resource;
+  shell(`
+    <h3 style="margin-top:0">${esc(l.title)}</h3>
+    <p class="muted small">Status: ${esc(l.status)}</p>
+    <textarea id="notes" rows="4" placeholder="Quantity, quality notes, contact person…">${esc(l.draft_notes)}</textarea>
+    <div class="row" style="margin-top:10px">
+      <button class="primary" id="save">Save draft</button>
+      <button id="publish">Publish listing</button>
+      <span class="ok" id="msg"></span>
+    </div>`);
+  $('#save').onclick = async () => {
+    await call(`/api/seller/listings/${l.id}/draft`, { notes: $('#notes').value });
+    $('#msg').textContent = 'Saved — idle window pushed back out.';
+    load();
+  };
+  $('#publish').onclick = async () => {
+    const out = await call(`/api/seller/listings/${l.id}/publish`);
+    $('#msg').textContent = `Published. ${out.tokens_revoked} live token(s) revoked.`;
+    setTimeout(load, 600);
+  };
+}
+
+function renderPickup() {
+  const l = S.resource;
+  shell(`
+    <h3 style="margin-top:0">${esc(l.title)}</h3>
+    <p>Pickup slot: <strong>${new Date(l.pickup_at).toLocaleString('en-IN')}</strong></p>
+    ${l.pickup_confirmed ? '<p class="ok">Already confirmed.</p>' : ''}
+    <div class="row"><button class="primary" id="confirm" ${l.pickup_confirmed ? 'disabled' : ''}>Confirm this slot</button>
+    <span class="ok" id="msg"></span></div>`);
+  if (!l.pickup_confirmed) {
+    $('#confirm').onclick = async () => {
+      const out = await call(`/api/seller/listings/${l.id}/pickup`);
+      $('#msg').textContent = `Confirmed. ${out.tokens_revoked} token(s) revoked.`;
+      setTimeout(load, 600);
+    };
+  }
+}
+
+function renderBid() {
+  const b = S.resource;
+  shell(`
+    <h3 style="margin-top:0">₹${b.amount.toLocaleString('en-IN')} from ${esc(b.buyer)}</h3>
+    <p class="muted small">Bid ${esc(b.id)} on ${esc(b.listing_id)} — status ${esc(b.status)}</p>
+    <div class="row">
+      <button class="primary" id="accept" ${b.status !== 'open' ? 'disabled' : ''}>Accept</button>
+      <button id="reject" ${b.status !== 'open' ? 'disabled' : ''}>Reject</button>
+      <span class="ok" id="msg"></span>
+    </div>`);
+  const decide = (d) => async () => {
+    const out = await call(`/api/seller/bids/${b.id}/${d}`);
+    $('#msg').textContent = `Bid ${out.bid.status}. ${out.tokens_revoked} token(s) revoked.`;
+    setTimeout(load, 600);
+  };
+  if (b.status === 'open') { $('#accept').onclick = decide('accept'); $('#reject').onclick = decide('reject'); }
+}
+
+function renderKyc() {
+  const k = S.resource;
+  shell(`
+    <p class="muted small">Arriving by link is not enough here. Bank details need a fresh OTP every time.</p>
+    <div class="row" style="margin-bottom:10px">
+      <button id="sendOtp">Send OTP to +${esc(S.seller.wa_id)}</button>
+      <span class="mono" id="devcode"></span>
+    </div>
+    <div class="row" style="margin-bottom:10px">
+      <input id="code" placeholder="6-digit code" style="max-width:160px" />
+      <button id="verify">Verify</button>
+      <span class="${S.otp_fresh ? 'ok' : 'muted'} small" id="otpstate">${S.otp_fresh ? 'OTP fresh' : 'not verified'}</span>
+    </div>
+    <hr style="border:0;border-top:1px solid var(--line);margin:14px 0" />
+    <div class="row">
+      <input id="acct" placeholder="Account number" style="max-width:220px" />
+      <button class="primary" id="submit">Submit bank details</button>
+    </div>
+    <p class="err" id="err"></p>
+    ${k.status !== 'pending' ? `<p class="ok">KYC ${esc(k.status)} · ****${esc(k.account_last4)}</p>` : ''}`);
+
+  $('#sendOtp').onclick = async () => {
+    const out = await call(`/api/seller/kyc/${k.id}/otp`);
+    $('#devcode').textContent = 'test code: ' + out.dev_code;
+  };
+  $('#verify').onclick = async () => {
+    $('#err').textContent = '';
+    try {
+      await call(`/api/seller/kyc/${k.id}/verify`, { code: $('#code').value.trim() });
+      load();
+    } catch (e) { $('#err').textContent = e.body.error; }
+  };
+  $('#submit').onclick = async () => {
+    $('#err').textContent = '';
+    try {
+      await call(`/api/seller/kyc/${k.id}/submit`, { account_last4: $('#acct').value.trim() });
+      load();
+    } catch (e) {
+      $('#err').textContent = e.body.error === 'otp_required' ? 'Verify a fresh OTP first.' : e.body.error;
+    }
+  };
+}
+
+async function load() {
+  const res = await fetch('/api/session');
+  if (!res.ok) { const b = await res.json().catch(() => ({})); return dead(b.state); }
+  S = await res.json();
+  ({
+    listing_draft: renderListingDraft,
+    pickup_slot: renderPickup,
+    bid_response: renderBid,
+    kyc: renderKyc
+  })[S.intent]();
+}
+
+// Local countdown; the server is the authority and will 401 when it really lapses.
+setInterval(() => {
+  if (!S) return;
+  S.idle_ms_left -= 1000;
+  const el = document.getElementById('idle');
+  if (el) el.textContent = Math.max(0, Math.round(S.idle_ms_left / 1000)) + 's';
+  if (S.idle_ms_left < -1000) load();
+}, 1000);
+
+load();
+</script>
+</body>
+</html>

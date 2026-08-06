@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Link expired &middot; Rapidue</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+<div class="landing">
+  <div class="banner dead">
+    <h2 style="margin:0 0 4px" id="headline">This link has expired</h2>
+    <p class="muted" style="margin:0" id="sub">Links stay live for a limited time so they can't be forwarded and reused later.</p>
+  </div>
+
+  <div class="panel">
+    <div class="body">
+      <p id="task" class="muted small"></p>
+      <button class="primary" id="resend">Send me a new link</button>
+      <p class="ok" id="ok" hidden>Sent. Check WhatsApp — the new link is in the console's message panel.</p>
+      <p class="err" id="err"></p>
+    </div>
+  </div>
+
+  <p class="small muted">Reason: <span class="mono" id="reason"></span></p>
+</div>
+
+<script>
+const q = new URLSearchParams(location.search);
+const t = q.get('t') || '';
+const reason = q.get('reason') || 'expired';
+document.getElementById('reason').textContent = reason;
+
+// One honest sentence per reason. Support lives on this screen.
+const COPY = {
+  expired: ['This link has expired', "Links stay live for a limited time so they can't be forwarded and reused later."],
+  superseded: ['This link was replaced', 'You asked for a newer link — use the most recent WhatsApp message instead.'],
+  revoked: ['This link is no longer active', 'It was switched off, usually because the task was already completed.'],
+  already_redeemed: ['This link has already been used', 'For anything involving bank details we only allow a single opening.'],
+  not_found: ["We couldn't recognise this link", 'It may have been copied incompletely.']
+};
+const [h, s] = COPY[reason] || COPY.expired;
+document.getElementById('headline').textContent = h;
+document.getElementById('sub').textContent = s;
+
+fetch('/api/link/context?t=' + encodeURIComponent(t))
+  .then((r) => r.json())
+  .then((c) => {
+    if (c.known) document.getElementById('task').textContent = `${c.intent_label} — ${c.title}`;
+    else document.getElementById('resend').disabled = true;
+  });
+
+document.getElementById('resend').onclick = async () => {
+  const btn = document.getElementById('resend');
+  btn.disabled = true;
+  const res = await fetch('/api/link/resend', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ t })
+  });
+  const out = await res.json().catch(() => ({}));
+  if (res.ok) {
+    document.getElementById('ok').hidden = false;
+  } else {
+    document.getElementById('err').textContent =
+      out.error === 'ceiling_already_passed'
+        ? 'That task is no longer available — the slot has already passed.'
+        : out.error;
+    btn.disabled = false;
+  }
+};
+</script>
+</body>
+</html>

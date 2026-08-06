@@ -1,0 +1,23 @@
+name = "whatsapp-link-harness"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = "public"
+
+# Created with:  npx wrangler d1 create whatsapp-link-harness
+# Paste the returned database_id below.
+[[d1_databases]]
+binding = "DB"
+database_name = "whatsapp-link-harness"
+database_id = "REPLACE_WITH_YOUR_D1_ID"
+
+[vars]
+# simulate | gupshup_selfserve | gupshup_enterprise
+# Template ids and params are editable at runtime from the console, not here.
+GUPSHUP_MODE = "simulate"
+GUPSHUP_SOURCE = ""
+GUPSHUP_APP_NAME = ""
+
+# Secrets (never in this file):
+#   npx wrangler pages secret put GUPSHUP_API_KEY
+#   npx wrangler pages secret put GUPSHUP_USERID      # enterprise only
+#   npx wrangler pages secret put GUPSHUP_PASSWORD    # enterprise only

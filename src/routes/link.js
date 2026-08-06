@@ -1,0 +1,77 @@
+'use strict';
+
+const express = require('express');
+const path = require('path');
+const { db } = require('../db');
+const { redeemToken, issueToken, hashToken, resourceFor } = require('../tokens');
+const { INTENTS } = require('../intents');
+const { createSession } = require('../auth');
+const { sendTemplate } = require('../whatsapp');
+
+const router = express.Router();
+const PUBLIC = path.join(__dirname, '..', '..', 'public');
+
+function baseUrl(req) {
+  return `${req.protocol}://${req.get('host')}`;
+}
+
+/**
+ * The landing route. Hash the incoming token, look it up, check the ceiling,
+ * and on success mint a scoped session cookie. The token has now done its job.
+ */
+router.get('/s/:token', (req, res) => {
+  const secret = req.params.token;
+  const result = redeemToken(secret);
+
+  if (!result.ok) {
+    const q = new URLSearchParams({ reason: result.reason, t: secret });
+    return res.redirect('/expired.html?' + q.toString());
+  }
+
+  createSession(res, result.row);
+  const q = new URLSearchParams({ intent: result.row.intent, r: result.row.resource_id });
+  return res.redirect('/land.html?' + q.toString());
+});
+
+/**
+ * The dead-link page's only button. Looks the old token up by hash (whatever its
+ * status), and issues a fresh one for the same seller / intent / resource.
+ */
+router.post('/api/link/resend', express.json(), async (req, res) => {
+  const secret = (req.body && req.body.t) || '';
+  const row = db().tokens.find((t) => t.token_hash === hashToken(secret));
+  if (!row) return res.status(404).json({ error: 'unknown_token' });
+
+  const issued = issueToken({ intentKey: row.intent, resourceId: row.resource_id, actor: 'seller_resend' });
+  if (issued.error) return res.status(409).json({ error: issued.error });
+
+  const msg = await sendTemplate({
+    seller: issued.seller,
+    intent: issued.intent,
+    resource: issued.resource,
+    secret: issued.secret,
+    baseUrl: baseUrl(req),
+    note: 'resent from dead-link page'
+  });
+  res.json({ ok: true, message_id: msg.id, wa_id: issued.seller.wa_id });
+});
+
+/** Context for the dead-link page, so it can name the task without leaking much. */
+router.get('/api/link/context', (req, res) => {
+  const row = db().tokens.find((t) => t.token_hash === hashToken(req.query.t || ''));
+  if (!row) return res.json({ known: false });
+  const intent = INTENTS[row.intent];
+  const resource = resourceFor(intent, row.resource_id);
+  res.json({
+    known: true,
+    intent: intent.key,
+    intent_label: intent.label,
+    status: row.status,
+    expires_at: row.expires_at,
+    title: (resource && resource.title) || row.resource_id
+  });
+});
+
+router.get('/land.html', (req, res) => res.sendFile(path.join(PUBLIC, 'land.html')));
+
+module.exports = router;

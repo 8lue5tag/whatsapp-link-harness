@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Link-token harness &middot; console</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+
+<div id="login" class="centered panel" hidden>
+  <h2>Sign in</h2>
+  <div class="body">
+    <p class="muted small">Test users only. Bearer token is issued on login and used for every console call.</p>
+    <div style="margin-bottom:10px"><input id="email" value="ops@test.local" autocomplete="username" /></div>
+    <div style="margin-bottom:10px"><input id="password" type="password" value="ops1234" autocomplete="current-password" /></div>
+    <div class="row" style="justify-content:space-between">
+      <button class="primary" id="loginBtn">Sign in</button>
+      <span class="err" id="loginErr"></span>
+    </div>
+    <hr style="border:0;border-top:1px solid var(--line);margin:14px 0" />
+    <div class="small muted">
+      ops@test.local / ops1234<br />
+      ramesh@test.local / test1234<br />
+      sunita@test.local / test1234<br />
+      iqbal@test.local / test1234
+    </div>
+  </div>
+</div>
+
+<div id="app" hidden>
+  <header class="topbar">
+    <div class="brand">Link-token harness <small>WhatsApp CTA &rarr; scoped session</small></div>
+    <div class="clock" id="clock">&mdash;</div>
+    <span class="pill" id="mode" title="GUPSHUP_MODE">&mdash;</span>
+    <div class="row small">
+      <button class="tiny" data-adv="60000">+1m</button>
+      <button class="tiny" data-adv="960000">+16m</button>
+      <button class="tiny" data-adv="10800000">+3h</button>
+      <button class="tiny" data-adv="691200000">+8d</button>
+      <button class="tiny ghost" id="clockReset">reset clock</button>
+    </div>
+    <div class="spacer"></div>
+    <span class="small muted" id="who"></span>
+    <button class="tiny" id="copyToken">copy bearer</button>
+    <button class="tiny" id="copyCurl">copy curl</button>
+    <button class="tiny danger" id="resetAll">reset data</button>
+    <button class="tiny ghost" id="logout">sign out</button>
+  </header>
+
+  <div class="grid">
+    <div>
+      <section class="panel">
+        <h2>Test users &amp; resources</h2>
+        <div class="body" id="sellers"></div>
+      </section>
+      <section class="panel">
+        <h2>Intent ceilings</h2>
+        <div class="body"><table id="intents"></table></div>
+      </section>
+    </div>
+
+    <div>
+      <section class="panel">
+        <h2>WhatsApp</h2>
+        <div class="body">
+          <div class="phone">
+            <div class="hdr"><strong>Rapidue</strong><span class="small">business account</span></div>
+            <div id="messages"><p class="muted small">No messages yet. Send a link from the left.</p></div>
+          </div>
+          <p class="small muted" style="margin-bottom:0">
+            Buttons open in this browser &mdash; the same as tapping in the WhatsApp webview.
+            Open one in a private window to play the &ldquo;forwarded to someone else&rdquo; case.
+          </p>
+        </div>
+      </section>
+      <section class="panel">
+        <h2>Event log</h2>
+        <div class="body events" id="events"></div>
+      </section>
+    </div>
+
+    <div>
+      <section class="panel">
+        <h2>Token ledger <span class="muted small">(hashes stored, secrets never)</span></h2>
+        <div class="body"><table id="tokens"></table></div>
+      </section>
+      <section class="panel">
+        <h2>Scoped sessions</h2>
+        <div class="body"><table id="sessions"></table></div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>
