@@ -1,0 +1,21 @@
+# Render blueprint. Optional - you can fill the same values into the dashboard by
+# hand. The service NAME decides the hostname, and the hostname is what a Meta
+# template freezes forever, so settle it before submitting any template.
+services:
+  - type: web
+    name: rapidue-link-harness
+    runtime: node
+    plan: free
+    region: singapore
+    branch: main
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      # Render injects PORT itself - server.js already reads it. Do not set it.
+      - key: GUPSHUP_MODE
+        value: enterprise_text
+      - key: GUPSHUP_USERID
+        sync: false # prompted in the dashboard, never committed
+      - key: GUPSHUP_PASSWORD
+        sync: false
