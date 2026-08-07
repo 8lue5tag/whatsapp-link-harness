@@ -80,7 +80,10 @@ function issueToken({ intentKey, resourceId, actor }) {
       row.status === 'active' &&
       row.seller_id === seller.id &&
       row.intent === intent.key &&
-      row.resource_id === resourceId
+      row.resource_id === resourceId &&
+      // Campaign tokens are permanent and already out in the wild. Reissuing must
+      // never supersede them, or links already sent would go dead.
+      !row.campaign
     ) {
       row.status = 'superseded';
       row.superseded_at = now();

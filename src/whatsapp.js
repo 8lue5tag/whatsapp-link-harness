@@ -4,7 +4,7 @@ const crypto = require('crypto');
 const { db, save } = require('./db');
 const { now } = require('./clock');
 const { logEvent } = require('./tokens');
-const gupshup = require('./gupshup');
+const providers = require('./providers');
 
 // Meta constraint: in an approved template the variable can only sit at the END
 // of the URL. So the route is /s/{{1}} and nothing follows it - no path segments
@@ -12,6 +12,11 @@ const gupshup = require('./gupshup');
 const TEMPLATE_URL = '/s/{{1}}';
 
 const TEMPLATES = {
+  seller_portal: {
+    name: 'seller_portal_v1',
+    button: 'Open my portal',
+    body: (r) => `Hi ${r.name}, open your Rapidue portal to manage your material.`
+  },
   listing_draft: {
     name: 'listing_draft_resume_v1',
     button: 'Resume listing',
@@ -35,74 +40,86 @@ const TEMPLATES = {
 };
 
 /**
- * Record the message, then deliver it according to GUPSHUP_MODE:
- *   simulate            - console only, no network call
- *   enterprise_text     - msg_type=TEXT, free-form, needs the 24h window
- *   enterprise_template - msg_type=HSM, needs an approved template
- *   selfserve_text | selfserve_template - api.gupshup.io, for a later migration
- * The raw request and response are stored either way. Enterprise answers HTTP
- * 200 with status:error in the body, so the payload is the only real evidence.
+ * Record the message, then deliver it through whichever provider the caller
+ * chose. Provider, mode and template come per send - not from config - so you
+ * can fire the same link at Gupshup, WATI and MSG91 and compare what comes back.
+ *
+ *  mode 'text'     - free-form. Legal only inside the 24h customer-care window
+ *                    (the customer messaged you last). Any URL, no approval.
+ *  mode 'template' - approved template. buttonSuffix carries the token into the
+ *                    dynamic URL button; each provider expresses that its own way.
+ *
+ * The raw request and response are always stored: providers routinely accept a
+ * message and then never deliver it, and that payload is the only evidence.
  */
-async function sendTemplate({ seller, intent, resource, secret, baseUrl, note }) {
+async function sendTemplate({ seller, intent, resource, secret, baseUrl, note, send }) {
   const d = db();
   const tpl = TEMPLATES[intent.key];
   const url = `${baseUrl}${TEMPLATE_URL.replace('{{1}}', secret)}`;
+  const opts = send || {};
+  const providerKey = opts.provider || process.env.SEND_PROVIDER || 'simulate';
+  const mode = opts.mode || process.env.SEND_MODE || 'text';
+  const templateId = opts.template || process.env['TEMPLATE_' + intent.key.toUpperCase()] || '';
+  const bodyText = tpl.body(resource);
 
   const msg = {
     id: 'm_' + crypto.randomBytes(6).toString('hex'),
     at: now(),
     wa_id: seller.wa_id,
     seller_id: seller.id,
-    template: tpl.name,
-    body: tpl.body(resource),
+    template: mode === 'template' ? templateId || '(none given)' : tpl.name,
+    body: bodyText,
     button_label: tpl.button,
     url,
     intent: intent.key,
     resource_id: resource.id,
     note: note || null,
-    channel: 'simulate',
+    provider: providerKey,
+    send_mode: mode,
+    channel: providerKey, // kept for older console builds
     provider_ok: null,
     provider_status: null,
-    provider_response: null
+    provider_response: null,
+    provider_request: null
   };
 
-  const cfg = gupshup.config(process.env);
-  msg.channel = cfg.mode;
-
-  if (cfg.mode !== 'simulate') {
-    const missing = gupshup.missingConfig(cfg);
-    if (missing.length) {
-      msg.provider_ok = false;
-      msg.provider_response = 'missing config: ' + missing.join(', ');
-      logEvent('whatsapp.error', `Send skipped - missing ${missing.join(', ')}`, { message_id: msg.id });
-    } else if (!seller.wa_id) {
-      msg.provider_ok = false;
-      msg.provider_response = 'seller has no wa_id - set a real phone number in the console';
-      logEvent('whatsapp.error', `Send skipped - ${seller.name} has no phone number`, { message_id: msg.id });
-    } else {
-      const text = `${tpl.body(resource)}\n\n${url}`;
-      const out = cfg.mode.endsWith('_template')
-        ? await gupshup.sendTemplate({
-            cfg,
-            destination: seller.wa_id,
-            templateId: process.env['GUPSHUP_TEMPLATE_' + intent.key.toUpperCase()] || '',
-            params: [secret],
-            renderedText: text
-          })
-        : await gupshup.sendText({ cfg, destination: seller.wa_id, text });
-
-      msg.provider_ok = out.ok;
-      msg.provider_status = out.status;
-      msg.provider_response = out.response;
-      msg.provider_request = out.request;
-      logEvent(
-        out.ok ? 'whatsapp.sent' : 'whatsapp.error',
-        `Gupshup ${cfg.mode} -> +${seller.wa_id}: HTTP ${out.status} ${String(out.detail || out.response).slice(0, 160)}`,
-        { message_id: msg.id }
-      );
-    }
+  if (providerKey === 'simulate') {
+    msg.provider_ok = true;
+    logEvent('whatsapp.sent', `Simulated ${tpl.name} to +${seller.wa_id}`, {
+      message_id: msg.id,
+      seller_id: seller.id
+    });
+  } else if (!seller.wa_id) {
+    msg.provider_ok = false;
+    msg.provider_response = 'seller has no phone number - set one in the console';
+    logEvent('whatsapp.error', `Send skipped - ${seller.name} has no phone number`, {
+      message_id: msg.id,
+      seller_id: seller.id
+    });
   } else {
-    logEvent('whatsapp.sent', `Simulated ${tpl.name} to +${seller.wa_id}`, { message_id: msg.id });
+    const out = await providers.send({
+      providerKey,
+      mode,
+      env: process.env,
+      destination: seller.wa_id,
+      // Free-form carries the whole link in the text. A template carries only
+      // the token, because its URL base is frozen at approval.
+      text: `${bodyText}\n\n${url}`,
+      templateId,
+      bodyParams: opts.bodyParams || [],
+      buttonSuffix: secret,
+      renderedText: `${bodyText}\n\n${url}`
+    });
+
+    msg.provider_ok = out.ok;
+    msg.provider_status = out.status;
+    msg.provider_response = out.response;
+    msg.provider_request = out.request;
+    logEvent(
+      out.ok ? 'whatsapp.sent' : 'whatsapp.error',
+      `${providerKey}/${mode} -> +${seller.wa_id}: HTTP ${out.status} ${String(out.detail || out.response).slice(0, 160)}`,
+      { message_id: msg.id, seller_id: seller.id }
+    );
   }
 
   d.messages.unshift(msg);
@@ -111,9 +128,13 @@ async function sendTemplate({ seller, intent, resource, secret, baseUrl, note })
   return msg;
 }
 
+/** What the console shows in its header and send panel. */
 function sendMode() {
-  const cfg = gupshup.config(process.env);
-  return { mode: cfg.mode, missing: gupshup.missingConfig(cfg), source: cfg.source, app_name: cfg.appName };
+  return {
+    providers: providers.status(process.env),
+    default_provider: process.env.SEND_PROVIDER || 'simulate',
+    default_mode: process.env.SEND_MODE || 'text'
+  };
 }
 
 module.exports = { sendTemplate, sendMode, TEMPLATES, TEMPLATE_URL };

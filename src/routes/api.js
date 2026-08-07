@@ -7,7 +7,7 @@ const { INTENTS, USE_ALERT_THRESHOLD } = require('../intents');
 const { issueToken, revokeToken, sweep, logEvent, resourceFor, ownerOf } = require('../tokens');
 const { issueBearer, requireBearer } = require('../auth');
 const { sendTemplate, sendMode } = require('../whatsapp');
-const { campaignLinks } = require('../campaign');
+const { campaignLinks, campaignSecretFor, ensureCampaignTokens } = require('../campaign');
 
 const router = express.Router();
 router.use(express.json());
@@ -109,7 +109,7 @@ router.get('/api/state', requireBearer, (req, res) => {
 /* ------------------------------- links --------------------------------- */
 
 router.post('/api/links', requireBearer, wrap(async (req, res) => {
-  const { intent, resource_id } = req.body || {};
+  const { intent, resource_id, provider, mode, template, body_params } = req.body || {};
 
   // A seller may only mint links for resources they own.
   const def = INTENTS[intent];
@@ -128,7 +128,9 @@ router.post('/api/links', requireBearer, wrap(async (req, res) => {
     intent: issued.intent,
     resource: issued.resource,
     secret: issued.secret,
-    baseUrl: baseUrl(req)
+    baseUrl: baseUrl(req),
+    // Chosen per send, so the same link can be fired at each provider in turn.
+    send: { provider, mode, template, bodyParams: body_params }
   });
 
   res.json({
@@ -205,5 +207,39 @@ router.post('/api/dev/reset', requireBearer, requireOps, (req, res) => {
 router.get('/api/campaign', requireBearer, (req, res) => {
   res.json({ links: campaignLinks(baseUrl(req), isOps(req.user) ? null : [req.user.id]) });
 });
+
+/**
+ * Send the EXISTING permanent campaign link through a provider. Deliberately
+ * separate from /api/links, which mints a new token - here the whole point is
+ * that the URL is the same one you pasted into your campaign.
+ */
+router.post('/api/campaign/send', requireBearer, wrap(async (req, res) => {
+  const { seller_id, provider, mode, template, body_params } = req.body || {};
+  const seller = db().users.find((u) => u.id === seller_id && u.role === 'seller');
+  if (!seller) return res.status(404).json({ error: 'unknown_seller' });
+  if (!isOps(req.user) && seller.id !== req.user.id) {
+    return res.status(403).json({ error: 'not_your_profile' });
+  }
+
+  ensureCampaignTokens();
+  const msg = await sendTemplate({
+    seller,
+    intent: INTENTS.seller_portal,
+    resource: seller,
+    secret: campaignSecretFor(seller.id),
+    baseUrl: baseUrl(req),
+    note: 'campaign link',
+    send: { provider, mode, template, bodyParams: body_params }
+  });
+
+  res.json({
+    ok: msg.provider_ok !== false,
+    url: msg.url,
+    provider: msg.provider,
+    send_mode: msg.send_mode,
+    status: msg.provider_status,
+    response: msg.provider_response
+  });
+}));
 
 module.exports = router;

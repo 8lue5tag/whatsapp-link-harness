@@ -82,6 +82,37 @@ Meta only allows the variable at the **end** of a template URL, so the route is
 `/s/{{1}}` and nothing follows it — no path segments after the token, no fragment.
 See [src/whatsapp.js](src/whatsapp.js).
 
+## Three providers, chosen per send
+
+Gupshup, WATI and MSG91 are all wired. You pick **provider**, **mode** and **template**
+in the console's Send settings panel at the moment you send, so you can fire the same
+link at each in turn and compare the raw responses side by side.
+
+| Mode | What goes out | Needs |
+|---|---|---|
+| `text` | the whole URL, inline | the customer messaged you in the last 24h |
+| `template` | only the 22-char token, into the frozen URL base | an approved template |
+
+Adapters live in [src/providers/](src/providers/) behind one interface —
+`sendText` and `sendTemplate`, both returning `{ok, status, response, request}`. Adding a
+fourth provider is one file plus its env vars, no changes anywhere else.
+
+Every send stores the raw request (secrets redacted) and raw response, shown under the
+bubble in the console. Providers routinely accept a message and then never deliver it, so
+that payload is the only real evidence.
+
+### The part that differs between them
+
+How the dynamic URL button's suffix is passed alongside body variables:
+
+- **MSG91** follows Meta's component model: `button_1: {subtype:'url', type:'text', value}`.
+- **WATI** uses *named* parameters, so the button's variable name is whatever you called
+  it when you built the template — set `WATI_BUTTON_PARAM` to match.
+- **Gupshup Enterprise** has no params array at all; HSM takes the fully rendered text.
+
+Verified live that all three adapters reach their real endpoints and return clean `401`s
+with invalid keys. The component shapes themselves are only provable with real keys.
+
 ## Sending through Gupshup for real
 
 `cp .env.example .env`, fill in your Enterprise userid/password, set the mode, restart.

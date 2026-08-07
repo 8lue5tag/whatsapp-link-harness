@@ -6,6 +6,18 @@ let me = JSON.parse(localStorage.getItem('me') || 'null');
 let state = null;
 let timer = null;
 
+// Chosen per send, remembered locally so it survives a refresh.
+const send = {
+  provider: localStorage.getItem('send.provider') || 'simulate',
+  mode: localStorage.getItem('send.mode') || 'text',
+  template: localStorage.getItem('send.template') || ''
+};
+function setSend(k, v) {
+  send[k] = v;
+  localStorage.setItem('send.' + k, v);
+  renderSendSettings();
+}
+
 /* ------------------------------ helpers -------------------------------- */
 
 async function api(path, options = {}) {
@@ -80,11 +92,11 @@ function renderClock() {
   $('#clockControls').hidden = !state.can.move_clock;
   $('#resetAll').hidden = !state.can.reset_data;
 
-  const m = state.send_mode;
   const badge = $('#mode');
-  const broken = m.mode !== 'simulate' && m.missing.length;
-  badge.textContent = broken ? `${m.mode} — missing ${m.missing.join(', ')}` : m.mode;
-  badge.className = 'pill ' + (broken ? 'revoked' : m.mode === 'simulate' ? '' : 'active');
+  const p = (state.send_mode.providers || []).find((x) => x.key === send.provider);
+  const broken = p && !p.ready && p.key !== 'simulate';
+  badge.textContent = `${send.provider} · ${send.mode}${broken ? ' — not configured' : ''}`;
+  badge.className = 'pill ' + (broken ? 'revoked' : send.provider === 'simulate' ? '' : 'active');
 }
 
 function renderSellers() {
@@ -141,6 +153,47 @@ function renderSellers() {
     .join('');
 }
 
+function renderSendSettings() {
+  const list = (state.send_mode && state.send_mode.providers) || [];
+  $('#sendSettings').innerHTML = `
+    <div class="row" style="margin-bottom:8px">
+      <select id="provSel" style="max-width:190px">
+        ${list
+          .map(
+            (p) =>
+              `<option value="${esc(p.key)}" ${p.key === send.provider ? 'selected' : ''}>
+                 ${esc(p.label)}${p.ready || p.key === 'simulate' ? '' : ' — not configured'}
+               </option>`
+          )
+          .join('')}
+      </select>
+      <select id="modeSel" style="max-width:200px">
+        <option value="text" ${send.mode === 'text' ? 'selected' : ''}>Free text (24h window)</option>
+        <option value="template" ${send.mode === 'template' ? 'selected' : ''}>Approved template</option>
+      </select>
+    </div>
+    <input id="tplInput" placeholder="template name / id" value="${esc(send.template)}"
+           ${send.mode === 'template' ? '' : 'disabled'} />
+    <p class="small muted" style="margin-bottom:0">
+      ${
+        send.mode === 'text'
+          ? 'Free text carries the whole URL and needs no approval — but only works if this person messaged you in the last 24 hours.'
+          : 'Template sends only the 22-char token; the URL base is frozen at approval.'
+      }
+    </p>
+    ${list
+      .filter((p) => !p.ready && p.key !== 'simulate')
+      .map((p) => `<p class="small" style="color:var(--warn);margin:4px 0 0">${esc(p.label)}: set ${esc(p.missing.join(', '))}</p>`)
+      .join('')}`;
+
+  $('#provSel').onchange = (e) => setSend('provider', e.target.value);
+  $('#modeSel').onchange = (e) => setSend('mode', e.target.value);
+  $('#tplInput').oninput = (e) => {
+    send.template = e.target.value;
+    localStorage.setItem('send.template', e.target.value);
+  };
+}
+
 function renderCampaign() {
   const rows = state.campaign || [];
   $('#campaign').innerHTML =
@@ -160,9 +213,11 @@ function renderCampaign() {
         <div class="row small">
           <button class="tiny" data-copy-url="${esc(c.url)}">copy URL</button>
           <button class="tiny" data-copy-url="${esc(c.token)}">copy token only</button>
+          <button class="tiny primary" data-campaign-send="${esc(c.seller_id)}">send this link</button>
           <a class="small" href="${esc(c.url)}" target="_blank" rel="noopener">open</a>
           <span class="muted">opened ${c.use_count}×</span>
         </div>
+        <div class="small" data-cmsg="${esc(c.seller_id)}"></div>
       </div>`
       )
       .join('');
@@ -197,8 +252,8 @@ function renderMessages() {
         <div class="tpl">${esc(m.template)}${m.note ? ' &middot; ' + esc(m.note) : ''}</div>
         <div>${esc(m.body)}</div>
         <a class="cta" href="${esc(m.url)}" target="_blank" rel="noopener">${esc(m.button_label)}</a>
-        <div class="time">to +${esc(m.wa_id)} &middot; ${clockTime(m.at)} &middot; ${esc(m.channel)}</div>
-        ${m.channel === 'simulate' ? '' : `
+        <div class="time">to +${esc(m.wa_id)} &middot; ${clockTime(m.at)} &middot; ${esc(m.provider || m.channel)}/${esc(m.send_mode || '')}</div>
+        ${(m.provider || m.channel) === 'simulate' ? '' : `
         <div class="small" style="margin-top:6px;border-top:1px solid #2a3942;padding-top:6px">
           <span class="pill ${m.provider_ok ? 'active' : 'revoked'}">${m.provider_ok ? 'accepted' : 'failed'}</span>
           <span class="muted">HTTP ${esc(m.provider_status)}</span>
@@ -258,6 +313,7 @@ function renderEvents() {
 
 function renderAll() {
   renderClock();
+  renderSendSettings();
   renderCampaign();
   renderSellers();
   renderIntents();
@@ -290,10 +346,41 @@ document.addEventListener('click', async (ev) => {
     try {
       await api('/api/links', {
         method: 'POST',
-        body: JSON.stringify({ intent: t.dataset.send, resource_id: t.dataset.res })
+        body: JSON.stringify({
+          intent: t.dataset.send,
+          resource_id: t.dataset.res,
+          provider: send.provider,
+          mode: send.mode,
+          template: send.template
+        })
       });
     } catch (err) {
       alert('Could not issue link: ' + (err.body ? err.body.error : err.message));
+    }
+    t.disabled = false;
+    return refresh();
+  }
+
+  if (t.dataset.campaignSend) {
+    const id = t.dataset.campaignSend;
+    const out = document.querySelector(`[data-cmsg="${id}"]`);
+    t.disabled = true;
+    out.textContent = `sending via ${send.provider}…`;
+    try {
+      const r = await api('/api/campaign/send', {
+        method: 'POST',
+        body: JSON.stringify({
+          seller_id: id,
+          provider: send.provider,
+          mode: send.mode,
+          template: send.template
+        })
+      });
+      out.className = 'small ' + (r.ok ? 'ok' : 'err');
+      out.textContent = `${r.provider}/${r.send_mode} → HTTP ${r.status} ${String(r.response || '').slice(0, 160)}`;
+    } catch (err) {
+      out.className = 'small err';
+      out.textContent = err.body ? JSON.stringify(err.body) : err.message;
     }
     t.disabled = false;
     return refresh();
