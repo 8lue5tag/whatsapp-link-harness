@@ -10,6 +10,35 @@ npm start      # http://localhost:3000
 
 Sign in as `ops@test.local` / `ops1234`.
 
+## Three seller logins, isolated
+
+| Login | Password | Sees |
+|---|---|---|
+| `ramesh@test.local` | `test1234` | only L-1001, L-1002, bid B-2001, KYC K-s1 |
+| `sunita@test.local` | `test1234` | only L-1003, bid B-2002, KYC K-s2 |
+| `iqbal@test.local` | `test1234` | only L-1004, bid B-2003, KYC K-s3 |
+| `ops@test.local` | `ops1234` | everything, plus the clock and reset |
+
+Isolation is enforced server-side, not in the browser: a seller's bearer token gets
+`not_your_resource` / `not_your_profile` / `not_your_token` on anyone else's data, and
+`ops_only` on the clock and reset. Hand-made requests don't get further than the UI does.
+
+## Permanent campaign links
+
+Each seller has one token that **never expires** and opens their whole portal rather
+than a single task. They're on the console's first panel, ready to copy.
+
+They are *derived*, not random — `HMAC(CAMPAIGN_SECRET, "campaign:v1:<seller_id>")` — so
+the identical URL comes back after a restart, a redeploy, or a wiped database. That
+matters because Render's free disk is erased on every restart, which would otherwise
+kill a campaign mid-flight. See [src/campaign.js](src/campaign.js).
+
+Set `CAMPAIGN_SECRET` once before a campaign goes out. Changing it later invalidates
+every link already sent.
+
+A campaign session can reach everything that seller owns and nothing else, and KYC still
+demands a fresh OTP. Task links stay narrower — pinned to their one resource.
+
 ## The two credentials, deliberately separate
 
 | | Bearer JWT | Link token → session cookie |

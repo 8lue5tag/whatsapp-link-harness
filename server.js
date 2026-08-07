@@ -13,6 +13,10 @@ const PORT = process.env.PORT || 3000;
 // Restore the virtual clock so stored timestamps still line up after a restart.
 clock.setOffset(db().clock_offset_ms || 0);
 
+// Recreate the permanent campaign tokens. They are derived, not random, so the
+// same three URLs come back after a restart, a redeploy or a wiped disk.
+require('./src/campaign').ensureCampaignTokens();
+
 // Behind cloudflared the origin is HTTPS but the hop to us is HTTP. Without this,
 // req.protocol is "http" and every link we mint is unopenable in the WhatsApp webview.
 app.set('trust proxy', true);

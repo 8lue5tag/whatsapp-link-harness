@@ -30,7 +30,9 @@ router.get('/s/:token', (req, res) => {
 
   createSession(res, result.row);
   const q = new URLSearchParams({ intent: result.row.intent, r: result.row.resource_id });
-  return res.redirect('/land.html?' + q.toString());
+  // A campaign token opens the seller's whole portal; a task token opens one task.
+  const page = result.row.intent === 'seller_portal' ? '/portal.html' : '/land.html';
+  return res.redirect(page + '?' + q.toString());
 });
 
 /**
@@ -75,5 +77,6 @@ router.get('/api/link/context', (req, res) => {
 });
 
 router.get('/land.html', (req, res) => res.sendFile(path.join(PUBLIC, 'land.html')));
+router.get('/portal.html', (req, res) => res.sendFile(path.join(PUBLIC, 'portal.html')));
 
 module.exports = router;

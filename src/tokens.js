@@ -32,12 +32,24 @@ function resourceFor(intent, resourceId) {
   if (intent.resource === 'listing') return d.listings.find((l) => l.id === resourceId);
   if (intent.resource === 'bid') return d.bids.find((b) => b.id === resourceId);
   if (intent.resource === 'kyc') return d.kyc.find((k) => k.id === resourceId);
+  if (intent.resource === 'seller') return d.users.find((u) => u.id === resourceId && u.role === 'seller');
   return null;
 }
 
+/** Who owns this resource. For a seller-scoped token, the resource *is* the seller. */
+function ownerOf(intent, resource) {
+  return intent.resource === 'seller' ? resource.id : resource.seller_id;
+}
+
+/** null means no ceiling at all - a campaign link that never expires. */
 function ceilingFor(intent, resource) {
-  if (intent.key === 'pickup_slot') return resource.pickup_at;
+  if (intent.ceilingKind === 'none') return null;
+  if (intent.ceilingKind === 'slot') return resource.pickup_at;
   return now() + intent.ceilingMs;
+}
+
+function isExpired(row) {
+  return row.expires_at != null && now() >= row.expires_at;
 }
 
 /**
@@ -54,11 +66,11 @@ function issueToken({ intentKey, resourceId, actor }) {
   const resource = resourceFor(intent, resourceId);
   if (!resource) return { error: 'unknown_resource' };
 
-  const seller = d.users.find((u) => u.id === resource.seller_id);
+  const seller = d.users.find((u) => u.id === ownerOf(intent, resource));
   if (!seller) return { error: 'unknown_seller' };
 
   const expiresAt = ceilingFor(intent, resource);
-  if (expiresAt <= now()) {
+  if (expiresAt != null && expiresAt <= now()) {
     return { error: 'ceiling_already_passed' };
   }
 
@@ -86,7 +98,8 @@ function issueToken({ intentKey, resourceId, actor }) {
     intent: intent.key,
     resource_id: resourceId,
     issued_at: now(),
-    expires_at: expiresAt, // absolute ceiling - written once, never touched again
+    // Absolute ceiling - written once, never touched again. null = never expires.
+    expires_at: expiresAt,
     use_count: 0,
     last_used_at: null,
     fraud_alert: false,
@@ -121,7 +134,7 @@ function redeemToken(secret) {
   if (row.status === 'revoked') return { ok: false, reason: 'revoked', row };
   if (row.status === 'superseded') return { ok: false, reason: 'superseded', row };
   if (row.status === 'redeemed') return { ok: false, reason: 'already_redeemed', row };
-  if (now() >= row.expires_at) {
+  if (isExpired(row)) {
     row.status = 'expired';
     save();
     return { ok: false, reason: 'expired', row };
@@ -185,7 +198,7 @@ function sweep() {
   const d = db();
   let changed = false;
   for (const row of d.tokens) {
-    if (row.status === 'active' && now() >= row.expires_at) {
+    if (row.status === 'active' && isExpired(row)) {
       row.status = 'expired';
       changed = true;
     }
@@ -201,5 +214,7 @@ module.exports = {
   hashToken,
   sweep,
   logEvent,
-  resourceFor
+  resourceFor,
+  ownerOf,
+  isExpired
 };

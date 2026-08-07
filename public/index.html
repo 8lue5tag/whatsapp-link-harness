@@ -19,11 +19,13 @@
       <span class="err" id="loginErr"></span>
     </div>
     <hr style="border:0;border-top:1px solid var(--line);margin:14px 0" />
-    <div class="small muted">
-      ops@test.local / ops1234<br />
-      ramesh@test.local / test1234<br />
-      sunita@test.local / test1234<br />
-      iqbal@test.local / test1234
+    <div class="small">
+      <div class="muted" style="margin-bottom:4px">Three seller logins — each sees only their own material:</div>
+      <div class="mono">ramesh@test.local / test1234</div>
+      <div class="mono">sunita@test.local / test1234</div>
+      <div class="mono">iqbal@test.local / test1234</div>
+      <div class="muted" style="margin:8px 0 4px">Admin — sees everything, controls the clock:</div>
+      <div class="mono">ops@test.local / ops1234</div>
     </div>
   </div>
 </div>
@@ -33,7 +35,7 @@
     <div class="brand">Link-token harness <small>WhatsApp CTA &rarr; scoped session</small></div>
     <div class="clock" id="clock">&mdash;</div>
     <span class="pill" id="mode" title="GUPSHUP_MODE">&mdash;</span>
-    <div class="row small">
+    <div class="row small" id="clockControls">
       <button class="tiny" data-adv="60000">+1m</button>
       <button class="tiny" data-adv="960000">+16m</button>
       <button class="tiny" data-adv="10800000">+3h</button>
@@ -50,6 +52,10 @@
 
   <div class="grid">
     <div>
+      <section class="panel">
+        <h2>Campaign links <span class="muted small">(permanent — paste into Gupshup)</span></h2>
+        <div class="body" id="campaign"></div>
+      </section>
       <section class="panel">
         <h2>Test users &amp; resources</h2>
         <div class="body" id="sellers"></div>

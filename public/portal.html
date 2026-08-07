@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Rapidue</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+<div class="landing">
+  <div id="root" class="muted">Opening your portal…</div>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const money = (n) => '₹' + Number(n).toLocaleString('en-IN');
+let S = null;
+
+async function call(path, body) {
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body || {})
+  });
+  const out = await res.json().catch(() => ({}));
+  if (!res.ok) throw Object.assign(new Error(out.error || res.statusText), { body: out });
+  return out;
+}
+
+function dead(state) {
+  document.body.innerHTML = `
+    <div class="landing">
+      <div class="banner dead">
+        <h2 style="margin:0 0 4px">You've been signed out</h2>
+        <p class="muted" style="margin:0">${state === 'absolute_expired'
+          ? 'This session reached its maximum length.'
+          : 'You were away for a while, so we closed the session.'}</p>
+      </div>
+      <p class="muted small">Your link doesn't expire — tap the button in your WhatsApp message again to come straight back in.</p>
+    </div>`;
+}
+
+function render() {
+  const s = S.seller, own = S.own;
+  const kyc = own.kyc;
+  const idle = Math.max(0, Math.round(S.idle_ms_left / 1000));
+
+  $('#root').innerHTML = `
+    <div class="banner warn">
+      <div class="row" style="justify-content:space-between">
+        <div><strong>${esc(s.name)}</strong> <span class="muted small">${esc(s.city || '')} · +${esc(s.wa_id || '—')}</span></div>
+        <span class="pill active">permanent link</span>
+      </div>
+      <div class="small muted" style="margin-top:4px">
+        Signed out after <strong id="idle">${idle}s</strong> idle — any action pushes that back out.
+        You only ever see your own material.
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Your listings</h2>
+      <div class="body">
+        ${own.listings.length ? own.listings.map(l => `
+          <div class="card">
+            <h3>${esc(l.title)}</h3>
+            <div class="row small" style="margin-bottom:8px">
+              <span class="pill ${l.status === 'published' ? 'redeemed' : ''}">${esc(l.status)}</span>
+              ${l.pickup_confirmed ? '<span class="pill active">pickup confirmed</span>' : ''}
+              <span class="muted">pickup ${new Date(l.pickup_at).toLocaleString('en-IN')}</span>
+            </div>
+            <textarea rows="2" data-notes="${l.id}" placeholder="Quantity, quality notes, contact person…">${esc(l.draft_notes || '')}</textarea>
+            <div class="row" style="margin-top:8px">
+              <button class="primary tiny" data-save="${l.id}">Save draft</button>
+              <button class="tiny" data-publish="${l.id}" ${l.status === 'published' ? 'disabled' : ''}>Publish</button>
+              <button class="tiny" data-pickup="${l.id}" ${l.pickup_confirmed ? 'disabled' : ''}>Confirm pickup</button>
+              <span class="ok small" data-msg="${l.id}"></span>
+            </div>
+          </div>`).join('') : '<p class="muted small">Nothing here yet.</p>'}
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Bids on your material</h2>
+      <div class="body">
+        ${own.bids.length ? own.bids.map(b => `
+          <div class="card">
+            <div class="row" style="justify-content:space-between">
+              <div><strong>${money(b.amount)}</strong> <span class="muted small">from ${esc(b.buyer)}</span></div>
+              <span class="pill ${b.status === 'open' ? 'active' : 'redeemed'}">${esc(b.status)}</span>
+            </div>
+            <div class="row" style="margin-top:8px">
+              <button class="primary tiny" data-accept="${b.id}" ${b.status !== 'open' ? 'disabled' : ''}>Accept</button>
+              <button class="tiny" data-reject="${b.id}" ${b.status !== 'open' ? 'disabled' : ''}>Reject</button>
+              <span class="ok small" data-msg="${b.id}"></span>
+            </div>
+          </div>`).join('') : '<p class="muted small">No bids yet.</p>'}
+      </div>
+    </div>
+
+    ${kyc ? `
+    <div class="panel">
+      <h2>Bank details &amp; KYC</h2>
+      <div class="body">
+        <p class="muted small">Arriving by link isn't enough here. Bank details need a fresh OTP every time.</p>
+        ${kyc.status !== 'pending'
+          ? `<p class="ok">KYC ${esc(kyc.status)} · account ****${esc(kyc.account_last4)}</p>`
+          : `
+          <div class="row" style="margin-bottom:10px">
+            <button class="tiny" id="sendOtp">Send OTP to +${esc(s.wa_id || '')}</button>
+            <span class="mono small" id="devcode"></span>
+          </div>
+          <div class="row" style="margin-bottom:10px">
+            <input id="code" placeholder="6-digit code" style="max-width:150px" />
+            <button class="tiny" id="verify">Verify</button>
+            <span class="small ${S.otp_fresh ? 'ok' : 'muted'}">${S.otp_fresh ? 'OTP verified' : 'not verified'}</span>
+          </div>
+          <div class="row">
+            <input id="acct" placeholder="Account number" style="max-width:200px" />
+            <button class="primary tiny" id="submitKyc">Submit</button>
+          </div>
+          <p class="err" id="kycErr"></p>`}
+      </div>
+    </div>` : ''}
+
+    <p class="small muted">Any request for another seller's listing returns 403, session or no session.</p>`;
+
+  wire();
+}
+
+function say(id, text) {
+  const el = document.querySelector(`[data-msg="${id}"]`);
+  if (el) el.textContent = text;
+}
+
+function wire() {
+  document.querySelectorAll('[data-save]').forEach(b => b.onclick = async () => {
+    const id = b.dataset.save;
+    await call(`/api/seller/listings/${id}/draft`, { notes: document.querySelector(`[data-notes="${id}"]`).value });
+    say(id, 'Saved.');
+    load();
+  });
+  document.querySelectorAll('[data-publish]').forEach(b => b.onclick = async () => {
+    const out = await call(`/api/seller/listings/${b.dataset.publish}/publish`);
+    say(b.dataset.publish, `Published. ${out.tokens_revoked} task link(s) revoked.`);
+    setTimeout(load, 700);
+  });
+  document.querySelectorAll('[data-pickup]').forEach(b => b.onclick = async () => {
+    const out = await call(`/api/seller/listings/${b.dataset.pickup}/pickup`);
+    say(b.dataset.pickup, `Confirmed. ${out.tokens_revoked} task link(s) revoked.`);
+    setTimeout(load, 700);
+  });
+  ['accept', 'reject'].forEach(kind =>
+    document.querySelectorAll(`[data-${kind}]`).forEach(b => b.onclick = async () => {
+      const id = b.dataset[kind];
+      const out = await call(`/api/seller/bids/${id}/${kind}`);
+      say(id, `Bid ${out.bid.status}.`);
+      setTimeout(load, 700);
+    })
+  );
+
+  const kyc = S.own.kyc;
+  if (kyc && $('#sendOtp')) {
+    $('#sendOtp').onclick = async () => {
+      const out = await call(`/api/seller/kyc/${kyc.id}/otp`);
+      $('#devcode').textContent = 'test code: ' + out.dev_code;
+    };
+    $('#verify').onclick = async () => {
+      $('#kycErr').textContent = '';
+      try { await call(`/api/seller/kyc/${kyc.id}/verify`, { code: $('#code').value.trim() }); load(); }
+      catch (e) { $('#kycErr').textContent = e.body.error; }
+    };
+    $('#submitKyc').onclick = async () => {
+      $('#kycErr').textContent = '';
+      try { await call(`/api/seller/kyc/${kyc.id}/submit`, { account_last4: $('#acct').value.trim() }); load(); }
+      catch (e) { $('#kycErr').textContent = e.body.error === 'otp_required' ? 'Verify a fresh OTP first.' : e.body.error; }
+    };
+  }
+}
+
+async function load() {
+  const res = await fetch('/api/session');
+  if (!res.ok) { const b = await res.json().catch(() => ({})); return dead(b.state); }
+  S = await res.json();
+  if (S.intent !== 'seller_portal') return (location.href = '/land.html' + location.search);
+  render();
+}
+
+// Local countdown only; the server is the authority and 401s when it truly lapses.
+setInterval(() => {
+  if (!S) return;
+  S.idle_ms_left -= 1000;
+  const el = document.getElementById('idle');
+  if (el) el.textContent = Math.max(0, Math.round(S.idle_ms_left / 1000)) + 's';
+  if (S.idle_ms_left < -1000) load();
+}, 1000);
+
+load();
+</script>
+</body>
+</html>

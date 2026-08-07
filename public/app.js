@@ -27,7 +27,7 @@ const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': 
 const clockTime = (ms) => new Date(ms).toLocaleTimeString('en-IN', { hour12: false });
 
 function rel(ms) {
-  if (ms == null) return '—';
+  if (ms == null) return 'never';
   const d = ms - state.now;
   const past = d < 0;
   const a = Math.abs(d);
@@ -75,6 +75,10 @@ function renderClock() {
   const off = state.clock_offset_ms;
   el.textContent = clockTime(state.now) + (off ? `  (+${Math.round(off / 60000)}m virtual)` : '  (real time)');
   el.classList.toggle('shifted', off !== 0);
+
+  // Sellers don't get the time machine or the reset button.
+  $('#clockControls').hidden = !state.can.move_clock;
+  $('#resetAll').hidden = !state.can.reset_data;
 
   const m = state.send_mode;
   const badge = $('#mode');
@@ -135,6 +139,33 @@ function renderSellers() {
       </div>`;
     })
     .join('');
+}
+
+function renderCampaign() {
+  const rows = state.campaign || [];
+  $('#campaign').innerHTML =
+    `<p class="small muted" style="margin-top:0">
+       These never expire and are rebuilt identically on every restart, so they are safe to
+       paste into a Gupshup campaign. One row per recipient.
+     </p>` +
+    rows
+      .map(
+        (c) => `
+      <div class="card">
+        <div class="row" style="justify-content:space-between">
+          <div><strong>${esc(c.name)}</strong> <span class="muted small">+${esc(c.wa_id || 'no number')}</span></div>
+          <span class="pill ${c.status === 'active' ? 'active' : esc(c.status)}">${esc(c.status)}</span>
+        </div>
+        <div class="mono small" style="word-break:break-all;margin:6px 0;color:var(--blue)">${esc(c.url)}</div>
+        <div class="row small">
+          <button class="tiny" data-copy-url="${esc(c.url)}">copy URL</button>
+          <button class="tiny" data-copy-url="${esc(c.token)}">copy token only</button>
+          <a class="small" href="${esc(c.url)}" target="_blank" rel="noopener">open</a>
+          <span class="muted">opened ${c.use_count}×</span>
+        </div>
+      </div>`
+      )
+      .join('');
 }
 
 function renderIntents() {
@@ -227,6 +258,7 @@ function renderEvents() {
 
 function renderAll() {
   renderClock();
+  renderCampaign();
   renderSellers();
   renderIntents();
   renderMessages();
@@ -265,6 +297,14 @@ document.addEventListener('click', async (ev) => {
     }
     t.disabled = false;
     return refresh();
+  }
+
+  if (t.dataset.copyUrl) {
+    await navigator.clipboard.writeText(t.dataset.copyUrl);
+    const was = t.textContent;
+    t.textContent = 'copied';
+    setTimeout(() => (t.textContent = was), 1200);
+    return;
   }
 
   if (t.dataset.savePhone) {
