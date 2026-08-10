@@ -52,6 +52,25 @@ const TEMPLATES = {
  * The raw request and response are always stored: providers routinely accept a
  * message and then never deliver it, and that payload is the only evidence.
  */
+/**
+ * Template parameters are written once in the console and resolved per send.
+ * Providers disagree about naming: WATI wants the template's own variable names,
+ * MSG91 ignores names and uses order. So we carry both, and each adapter takes
+ * what it needs. Flag the URL button's parameter with button:true.
+ */
+function resolveParams(list, vars) {
+  return (list || [])
+    .filter((p) => p && p.name)
+    .map((p) => ({
+      name: String(p.name),
+      button: !!p.button,
+      value: String(p.value == null ? '' : p.value).replace(
+        /\{\{(\w+)\}\}/g,
+        (m, k) => (vars[k] == null ? m : String(vars[k]))
+      )
+    }));
+}
+
 async function sendTemplate({ seller, intent, resource, secret, baseUrl, note, send }) {
   const d = db();
   const tpl = TEMPLATES[intent.key];
@@ -61,6 +80,19 @@ async function sendTemplate({ seller, intent, resource, secret, baseUrl, note, s
   const mode = opts.mode || process.env.SEND_MODE || 'text';
   const templateId = opts.template || process.env['TEMPLATE_' + intent.key.toUpperCase()] || '';
   const bodyText = tpl.body(resource);
+
+  // Placeholders usable in any parameter value.
+  const params = resolveParams(opts.params, {
+    token: secret,
+    url: url,
+    name: seller.name,
+    first_name: String(seller.name || '').split(' ')[0],
+    wa_id: seller.wa_id || '',
+    city: seller.city || '',
+    title: resource.title || resource.id || '',
+    amount: resource.amount == null ? '' : String(resource.amount),
+    buyer: resource.buyer || ''
+  });
 
   const msg = {
     id: 'm_' + crypto.randomBytes(6).toString('hex'),
@@ -76,6 +108,9 @@ async function sendTemplate({ seller, intent, resource, secret, baseUrl, note, s
     note: note || null,
     provider: providerKey,
     send_mode: mode,
+    // Recorded even when simulating, so you can check the resolution before
+    // spending a real send on it.
+    params_sent: mode === 'template' ? params : null,
     channel: providerKey, // kept for older console builds
     provider_ok: null,
     provider_status: null,
@@ -106,8 +141,7 @@ async function sendTemplate({ seller, intent, resource, secret, baseUrl, note, s
       // the token, because its URL base is frozen at approval.
       text: `${bodyText}\n\n${url}`,
       templateId,
-      bodyParams: opts.bodyParams || [],
-      buttonSuffix: secret,
+      params,
       renderedText: `${bodyText}\n\n${url}`
     });
 

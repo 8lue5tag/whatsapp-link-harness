@@ -101,6 +101,38 @@ Every send stores the raw request (secrets redacted) and raw response, shown und
 bubble in the console. Providers routinely accept a message and then never deliver it, so
 that payload is the only real evidence.
 
+### WATI
+
+Shapes taken from the official collection, [ClareAI/wati-postman-collection](https://github.com/ClareAI/wati-postman-collection):
+
+```
+POST {base}/api/v1/sendTemplateMessage?whatsappNumber=91…      Bearer token
+     { template_name, broadcast_name, parameters: [{name, value}] }
+
+POST {base}/api/v1/sendSessionMessage/91…                      multipart: messageText
+```
+
+Two things that will bite you:
+
+- **Parameters are matched by name, not position.** The names are whatever you called
+  them in the template builder. A dynamic URL button's variable is just another named
+  parameter — mark it `"button": true` in the console so MSG91 and Gupshup, which are
+  positional, know which one it is.
+- **`sendSessionMessage` takes multipart form-data**, not JSON and not a query string.
+  Set `WATI_SESSION_VIA_QUERY=1` if your tenant expects `?messageText=` instead.
+
+`WATI_BASE_URL` is per-tenant — copy it from WATI's own API docs page. The published
+environment file says `app-server.wati.io`, but live tenants are usually
+`live-mt-server.wati.io/<tenantId>` or `live-server-<id>.wati.io`. Guessing gives a 404.
+
+The console has a **pull WATI templates** button (ops only) that lists your templates and
+the variable names each declares — worth using before the first template send, since a
+wrong name is the usual reason one fails.
+
+**WATI has no URL-button interactive message.** Its `sendInteractiveButtonsMessage` only
+does quick replies (`buttons: [{text}]`). So inside the 24h window the link has to travel
+as plain text; a tappable URL button needs an approved template.
+
 ### The part that differs between them
 
 How the dynamic URL button's suffix is passed alongside body variables:

@@ -26,8 +26,18 @@ function redactForm(params) {
  * payload. Always returns - a provider that throws or hangs must never take the
  * process with it, because a dead process turns every CTA into a 404.
  */
-async function request({ url, method = 'POST', headers = {}, form, json, timeoutMs = TIMEOUT_MS }) {
-  const body = form ? new URLSearchParams(form) : json ? JSON.stringify(json) : undefined;
+async function request({ url, method = 'POST', headers = {}, form, json, multipart, timeoutMs = TIMEOUT_MS }) {
+  let body;
+  if (multipart) {
+    // Let undici set the multipart boundary itself - never set content-type here.
+    body = new FormData();
+    for (const [k, v] of Object.entries(multipart)) body.append(k, String(v));
+  } else if (form) {
+    body = new URLSearchParams(form);
+  } else if (json) {
+    body = JSON.stringify(json);
+  }
+
   const sentHeaders = {
     accept: 'application/json',
     ...(form ? { 'content-type': 'application/x-www-form-urlencoded' } : {}),
@@ -39,7 +49,7 @@ async function request({ url, method = 'POST', headers = {}, form, json, timeout
     url,
     method,
     headers: redactObject(sentHeaders),
-    body: form ? redactForm(form) : json ? redactObject(json) : null
+    body: form ? redactForm(form) : json ? redactObject(json) : multipart ? redactObject(multipart) : null
   });
 
   try {

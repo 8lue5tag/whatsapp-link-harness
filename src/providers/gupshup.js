@@ -101,10 +101,13 @@ module.exports = {
    * Enterprise HSM has no params array - it takes the fully rendered text and
    * matches it against the approved template, so the text must line up exactly.
    */
-  async sendTemplate({ cfg, destination, templateId, bodyParams, buttonSuffix, renderedText }) {
+  async sendTemplate({ cfg, destination, templateId, params: named, renderedText }) {
     if (cfg.flavour === 'selfserve') {
-      const params = [...(bodyParams || [])];
-      if (buttonSuffix) params.push(buttonSuffix);
+      // Positional, body variables first, the URL button's suffix last.
+      const params = [
+        ...(named || []).filter((p) => !p.button).map((p) => String(p.value)),
+        ...(named || []).filter((p) => p.button).map((p) => String(p.value))
+      ];
       const out = await request({
         url: cfg.base + '/template/msg',
         headers: { apikey: cfg.apiKey },

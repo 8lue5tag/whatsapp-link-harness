@@ -7,11 +7,23 @@ let state = null;
 let timer = null;
 
 // Chosen per send, remembered locally so it survives a refresh.
+const DEFAULT_PARAMS = '[\n  { "name": "name",  "value": "{{first_name}}" },\n  { "name": "token", "value": "{{token}}", "button": true }\n]';
+
 const send = {
   provider: localStorage.getItem('send.provider') || 'simulate',
   mode: localStorage.getItem('send.mode') || 'text',
-  template: localStorage.getItem('send.template') || ''
+  template: localStorage.getItem('send.template') || '',
+  paramsText: localStorage.getItem('send.paramsText') || DEFAULT_PARAMS
 };
+
+function parsedParams() {
+  try {
+    const v = JSON.parse(send.paramsText);
+    return Array.isArray(v) ? v : null;
+  } catch (err) {
+    return null;
+  }
+}
 function setSend(k, v) {
   send[k] = v;
   localStorage.setItem('send.' + k, v);
@@ -172,8 +184,27 @@ function renderSendSettings() {
         <option value="template" ${send.mode === 'template' ? 'selected' : ''}>Approved template</option>
       </select>
     </div>
-    <input id="tplInput" placeholder="template name / id" value="${esc(send.template)}"
+    <input id="tplInput" placeholder="template name (WATI: elementName)" value="${esc(send.template)}"
            ${send.mode === 'template' ? '' : 'disabled'} />
+    ${
+      send.mode === 'template'
+        ? `<div style="margin-top:8px">
+             <div class="row" style="justify-content:space-between">
+               <span class="small muted">Parameters — WATI matches by <em>name</em></span>
+               ${state.can.see_all_sellers ? '<button class="tiny" id="pullTpl">pull WATI templates</button>' : ''}
+             </div>
+             <textarea id="paramsInput" rows="6" class="mono" style="margin-top:4px">${esc(send.paramsText)}</textarea>
+             <p class="small ${parsedParams() ? 'muted' : 'err'}" style="margin:4px 0 0">
+               ${
+                 parsedParams()
+                   ? 'Placeholders: {{token}} {{url}} {{name}} {{first_name}} {{title}} {{amount}} {{buyer}} {{city}} · mark the URL button param with "button": true'
+                   : 'Not valid JSON — sends will fall back to no parameters.'
+               }
+             </p>
+             <div class="small mono muted" id="tplList" style="margin-top:6px"></div>
+           </div>`
+        : ''
+    }
     <p class="small muted" style="margin-bottom:0">
       ${
         send.mode === 'text'
@@ -192,6 +223,41 @@ function renderSendSettings() {
     send.template = e.target.value;
     localStorage.setItem('send.template', e.target.value);
   };
+
+  const pi = $('#paramsInput');
+  if (pi) {
+    pi.oninput = (e) => {
+      send.paramsText = e.target.value;
+      localStorage.setItem('send.paramsText', e.target.value);
+    };
+    // Re-render only on blur, so typing isn't interrupted by the 2s refresh.
+    pi.onblur = () => renderSendSettings();
+  }
+
+  const pull = $('#pullTpl');
+  if (pull) {
+    pull.onclick = async () => {
+      const out = $('#tplList');
+      out.textContent = 'asking WATI…';
+      try {
+        const r = await api('/api/providers/wati/templates');
+        out.innerHTML = r.templates
+          ? r.templates
+              .map(
+                (t) =>
+                  `<div>${esc(t.name)} <span class="muted">${esc(t.status || '')}</span>` +
+                  (t.variables && t.variables.length
+                    ? ` — vars: ${esc(t.variables.join(', '))}`
+                    : ' — no variables listed') +
+                  `</div>`
+              )
+              .join('')
+          : esc(r.raw || 'no templates returned');
+      } catch (err) {
+        out.textContent = err.body ? JSON.stringify(err.body) : err.message;
+      }
+    };
+  }
 }
 
 function renderCampaign() {
@@ -351,7 +417,8 @@ document.addEventListener('click', async (ev) => {
           resource_id: t.dataset.res,
           provider: send.provider,
           mode: send.mode,
-          template: send.template
+          template: send.template,
+          params: parsedParams() || []
         })
       });
     } catch (err) {
@@ -373,7 +440,8 @@ document.addEventListener('click', async (ev) => {
           seller_id: id,
           provider: send.provider,
           mode: send.mode,
-          template: send.template
+          template: send.template,
+          params: parsedParams() || []
         })
       });
       out.className = 'small ' + (r.ok ? 'ok' : 'err');

@@ -109,7 +109,7 @@ router.get('/api/state', requireBearer, (req, res) => {
 /* ------------------------------- links --------------------------------- */
 
 router.post('/api/links', requireBearer, wrap(async (req, res) => {
-  const { intent, resource_id, provider, mode, template, body_params } = req.body || {};
+  const { intent, resource_id, provider, mode, template, params } = req.body || {};
 
   // A seller may only mint links for resources they own.
   const def = INTENTS[intent];
@@ -130,7 +130,7 @@ router.post('/api/links', requireBearer, wrap(async (req, res) => {
     secret: issued.secret,
     baseUrl: baseUrl(req),
     // Chosen per send, so the same link can be fired at each provider in turn.
-    send: { provider, mode, template, bodyParams: body_params }
+    send: { provider, mode, template, params }
   });
 
   res.json({
@@ -203,6 +203,36 @@ router.post('/api/dev/reset', requireBearer, requireOps, (req, res) => {
   res.json({ ok: true });
 });
 
+/**
+ * Ask WATI what templates exist and what variables they declare. WATI parameters
+ * are named, so guessing the names is the usual reason a template send fails.
+ */
+router.get('/api/providers/wati/templates', requireBearer, requireOps, wrap(async (req, res) => {
+  const wati = require('../providers/wati');
+  const cfg = wati.config(process.env);
+  const missing = wati.missing(cfg);
+  if (missing.length) return res.status(409).json({ error: 'missing_config', missing });
+
+  const out = await wati.listTemplates({ cfg });
+  const list = out.json && (out.json.messageTemplates || out.json.result || out.json.data);
+  res.json({
+    ok: out.ok,
+    status: out.status,
+    templates: Array.isArray(list)
+      ? list.map((t) => ({
+          name: t.elementName || t.name,
+          status: t.status,
+          category: t.category,
+          language: t.language && (t.language.text || t.language.key || t.language),
+          body: t.body || (t.data && t.data.slice && t.data.slice(0, 200)),
+          // The names you must use in `params`.
+          variables: (t.customParams || t.parameters || []).map((p) => p.paramName || p.name)
+        }))
+      : null,
+    raw: Array.isArray(list) ? undefined : String(out.response).slice(0, 800)
+  });
+}));
+
 /** The pasteable campaign URLs. Sellers see only their own. */
 router.get('/api/campaign', requireBearer, (req, res) => {
   res.json({ links: campaignLinks(baseUrl(req), isOps(req.user) ? null : [req.user.id]) });
@@ -214,7 +244,7 @@ router.get('/api/campaign', requireBearer, (req, res) => {
  * that the URL is the same one you pasted into your campaign.
  */
 router.post('/api/campaign/send', requireBearer, wrap(async (req, res) => {
-  const { seller_id, provider, mode, template, body_params } = req.body || {};
+  const { seller_id, provider, mode, template, params } = req.body || {};
   const seller = db().users.find((u) => u.id === seller_id && u.role === 'seller');
   if (!seller) return res.status(404).json({ error: 'unknown_seller' });
   if (!isOps(req.user) && seller.id !== req.user.id) {
@@ -229,7 +259,7 @@ router.post('/api/campaign/send', requireBearer, wrap(async (req, res) => {
     secret: campaignSecretFor(seller.id),
     baseUrl: baseUrl(req),
     note: 'campaign link',
-    send: { provider, mode, template, bodyParams: body_params }
+    send: { provider, mode, template, params }
   });
 
   res.json({

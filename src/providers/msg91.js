@@ -57,13 +57,16 @@ module.exports = {
     return { ...out, ok: out.httpOk && v.ok, detail: v.detail };
   },
 
-  async sendTemplate({ cfg, destination, templateId, bodyParams, buttonSuffix }) {
+  async sendTemplate({ cfg, destination, templateId, params }) {
+    // MSG91 is positional: names are ignored, order is what counts. The param
+    // flagged as the URL button becomes button_1 rather than a body variable.
     const components = {};
-    (bodyParams || []).forEach((value, i) => {
-      components[`body_${i + 1}`] = { type: 'text', value: String(value) };
+    (params || []).filter((p) => !p.button).forEach((p, i) => {
+      components[`body_${i + 1}`] = { type: 'text', value: String(p.value) };
     });
-    if (buttonSuffix) {
-      components.button_1 = { subtype: 'url', type: 'text', value: buttonSuffix };
+    const btn = (params || []).find((p) => p.button);
+    if (btn) {
+      components.button_1 = { subtype: 'url', type: 'text', value: String(btn.value) };
     }
 
     const out = await request({

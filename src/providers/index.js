@@ -40,7 +40,7 @@ function status(env) {
  * Send via a named provider. `mode` picks free-form text (only legal inside the
  * 24h customer-care window) or an approved template.
  */
-async function send({ providerKey, mode, env, destination, text, templateId, bodyParams, buttonSuffix, renderedText }) {
+async function send({ providerKey, mode, env, destination, text, templateId, params, renderedText }) {
   const adapter = get(providerKey);
   if (!adapter) return { ok: false, status: 0, response: `unknown provider: ${providerKey}`, detail: 'unknown_provider' };
 
@@ -59,7 +59,7 @@ async function send({ providerKey, mode, env, destination, text, templateId, bod
   }
 
   return mode === 'template'
-    ? adapter.sendTemplate({ cfg, destination, templateId, bodyParams, buttonSuffix, renderedText })
+    ? adapter.sendTemplate({ cfg, destination, templateId, params, renderedText })
     : adapter.sendText({ cfg, destination, text });
 }
 
