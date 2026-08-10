@@ -4,7 +4,7 @@ const express = require('express');
 const cookieParser = require('cookie-parser');
 const path = require('path');
 
-const { db } = require('./src/db');
+const { db, applySellerPhones } = require('./src/db');
 const clock = require('./src/clock');
 
 const app = express();
@@ -16,6 +16,11 @@ clock.setOffset(db().clock_offset_ms || 0);
 // Recreate the permanent campaign tokens. They are derived, not random, so the
 // same three URLs come back after a restart, a redeploy or a wiped disk.
 require('./src/campaign').ensureCampaignTokens();
+
+// Real phone numbers, if pinned in the environment. Without this they revert to
+// the fake seed values whenever the disk is wiped.
+const phones = applySellerPhones(process.env);
+if (phones.length) console.log('  phones  : ' + phones.join(', '));
 
 // Behind cloudflared the origin is HTTPS but the hop to us is HTTP. Without this,
 // req.protocol is "http" and every link we mint is unopenable in the WhatsApp webview.

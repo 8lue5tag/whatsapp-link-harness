@@ -135,4 +135,38 @@ function db() {
   return load();
 }
 
-module.exports = { db, save, reset, load, DB_FILE };
+/**
+ * Real phone numbers, pinned in the environment rather than typed into the UI.
+ *
+ * Render's free disk is wiped on every restart and every idle spin-down, so a
+ * number entered in the console silently reverts to the fake seed value. Setting
+ * SELLER_PHONES makes it survive:
+ *
+ *   SELLER_PHONES=s1=919876543210,s2=919812345678,s3=919800000000
+ *
+ * Keys may be a seller id (s1) or an email (ramesh@test.local). Anything
+ * non-numeric in the value is stripped, so +91 98765 43210 is fine.
+ */
+function applySellerPhones(env) {
+  const spec = String((env && env.SELLER_PHONES) || '').trim();
+  if (!spec) return [];
+
+  const d = load();
+  const applied = [];
+  for (const pair of spec.split(',')) {
+    const [rawKey, rawVal] = pair.split('=');
+    if (!rawKey || !rawVal) continue;
+    const key = rawKey.trim().toLowerCase();
+    const wa = rawVal.replace(/[^0-9]/g, '');
+    if (wa.length < 10) continue;
+
+    const user = d.users.find((u) => u.id.toLowerCase() === key || String(u.email).toLowerCase() === key);
+    if (!user) continue;
+    user.wa_id = wa;
+    applied.push(`${user.name} -> +${wa}`);
+  }
+  if (applied.length) save();
+  return applied;
+}
+
+module.exports = { db, save, reset, load, applySellerPhones, DB_FILE };
