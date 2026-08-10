@@ -8,7 +8,8 @@
   "scripts": {
     "start": "node --env-file-if-exists=.env server.js",
     "dev": "node --env-file-if-exists=.env --watch server.js",
-    "reset": "node -e \"require('fs').rmSync('data/db.json',{force:true});console.log('db reset')\""
+    "reset": "node -e \"require('fs').rmSync('data/db.json',{force:true});console.log('db reset')\"",
+    "wati:check": "node --env-file-if-exists=.env scripts/wati-check.js"
   },
   "dependencies": {
     "cookie-parser": "^1.4.6",

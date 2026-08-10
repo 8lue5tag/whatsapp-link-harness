@@ -81,6 +81,12 @@ async function sendTemplate({ seller, intent, resource, secret, baseUrl, note, s
   const templateId = opts.template || process.env['TEMPLATE_' + intent.key.toUpperCase()] || '';
   const bodyText = tpl.body(resource);
 
+  // A campaign token is scoped to the seller, not a listing, so material and
+  // rate come from that seller's own first listing / open bid.
+  const d0 = db();
+  const firstListing = d0.listings.find((l) => l.seller_id === seller.id);
+  const firstBid = d0.bids.find((b) => b.seller_id === seller.id && b.status === 'open');
+
   // Placeholders usable in any parameter value.
   const params = resolveParams(opts.params, {
     token: secret,
@@ -91,7 +97,23 @@ async function sendTemplate({ seller, intent, resource, secret, baseUrl, note, s
     city: seller.city || '',
     title: resource.title || resource.id || '',
     amount: resource.amount == null ? '' : String(resource.amount),
-    buyer: resource.buyer || ''
+    buyer: resource.buyer || '',
+    // Material name without the tonnage/location prefix, e.g. "PET bottles".
+    material: (() => {
+      const t = (resource.title || (firstListing && firstListing.title) || 'scrap').split(' - ')[0];
+      return t.replace(/^[\d.]+\s*MT\s*/i, '').trim() || 'scrap';
+    })(),
+    // Per-kg rate, because the approved template says "per kg". Bid amounts are
+    // lot totals and would read as nonsense there.
+    rate: String(
+      resource.rate_per_kg != null
+        ? resource.rate_per_kg
+        : firstListing && firstListing.rate_per_kg != null
+          ? firstListing.rate_per_kg
+          : firstBid
+            ? firstBid.amount
+            : ''
+    )
   });
 
   const msg = {

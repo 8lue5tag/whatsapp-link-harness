@@ -46,7 +46,9 @@ module.exports = {
     return {
       flavour: 'default',
       base: String(env.WATI_BASE_URL || '').replace(/\/+$/, ''),
-      token: env.WATI_TOKEN || '',
+      // WATI issues two credentials: a long "eyJ..." JWT access token (what the
+      // /api/v1 endpoints want) and a newer "wati_..." key. Accept either name.
+      token: env.WATI_TOKEN || env.WATI_BEARER_TOKEN || '',
       broadcastName: env.WATI_BROADCAST_NAME || 'harness-test',
       sessionViaQuery: String(env.WATI_SESSION_VIA_QUERY || '') === '1'
     };

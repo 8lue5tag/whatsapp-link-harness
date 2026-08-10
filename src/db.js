@@ -60,6 +60,7 @@ function seed() {
         title: '8.2 MT PET bottles - Warangal',
         status: 'draft',
         pickup_at: t + 2 * DAY,
+        rate_per_kg: 32,
         draft_notes: ''
       },
       {
@@ -68,6 +69,7 @@ function seed() {
         title: '3.5 MT HDPE drums - Karimnagar',
         status: 'draft',
         pickup_at: t + 6 * HOUR,
+        rate_per_kg: 28,
         draft_notes: ''
       },
       {
@@ -76,6 +78,7 @@ function seed() {
         title: '12 MT mixed paper - Nashik',
         status: 'draft',
         pickup_at: t + 3 * DAY,
+        rate_per_kg: 12,
         draft_notes: ''
       },
       {
@@ -84,6 +87,7 @@ function seed() {
         title: '1.1 MT aluminium scrap - Kochi',
         status: 'draft',
         pickup_at: t + 26 * HOUR,
+        rate_per_kg: 145,
         draft_notes: ''
       }
     ],

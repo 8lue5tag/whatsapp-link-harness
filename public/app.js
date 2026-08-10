@@ -7,7 +7,18 @@ let state = null;
 let timer = null;
 
 // Chosen per send, remembered locally so it survives a refresh.
-const DEFAULT_PARAMS = '[\n  { "name": "name",  "value": "{{first_name}}" },\n  { "name": "token", "value": "{{token}}", "button": true }\n]';
+// Matches the approved template:
+//   Hi {{NAME}}, your recent {{mat}} buying rate was Rs {{price}} per kg.
+//   Confirm rate change if any.        button -> .../s/{{1}}
+// Names are case-sensitive and must match the template exactly.
+const DEFAULT_PARAMS = [
+  '[',
+  '  { "name": "NAME",  "value": "{{first_name}}" },',
+  '  { "name": "mat",   "value": "{{material}}" },',
+  '  { "name": "price", "value": "{{rate}}" },',
+  '  { "name": "1",     "value": "{{token}}", "button": true }',
+  ']'
+].join('\n');
 
 const send = {
   provider: localStorage.getItem('send.provider') || 'simulate',
