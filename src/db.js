@@ -23,7 +23,18 @@ function seed() {
         password: 'test1234',
         role: 'seller',
         wa_id: '919876500001',
-        city: 'Warangal'
+        city: 'Warangal',
+        // Buyer-portal profile. These are the "applied defaults" shown on the
+        // landing page - pulled from the profile, overridable per requirement.
+        profile: {
+          company: 'GO TOUR TRAVELS AND HOLIDAYS',
+          material: 'PET Bottle Scrap Baled - Clear',
+          location: 'Attibele',
+          payment_days: 30,
+          need_by: t + 5 * DAY,
+          min_rating: 'Any',
+          last_rate: 32
+        }
       },
       {
         id: 's2',
@@ -32,7 +43,16 @@ function seed() {
         password: 'test1234',
         role: 'seller',
         wa_id: '919876500002',
-        city: 'Nashik'
+        city: 'Nashik',
+        profile: {
+          company: 'PATIL RECYCLING WORKS',
+          material: 'Mixed Paper - Grade A',
+          location: 'Nashik MIDC',
+          payment_days: 30,
+          need_by: t + 8 * DAY,
+          min_rating: '4 and above',
+          last_rate: 12
+        }
       },
       {
         id: 's3',
@@ -41,7 +61,16 @@ function seed() {
         password: 'test1234',
         role: 'seller',
         wa_id: '919876500003',
-        city: 'Kochi'
+        city: 'Kochi',
+        profile: {
+          company: 'RAHMAN METALS AND ALLOYS',
+          material: 'Aluminium Scrap - UBC',
+          location: 'Kochi',
+          payment_days: 15,
+          need_by: t + 3 * DAY,
+          min_rating: 'Any',
+          last_rate: 145
+        }
       },
       {
         id: 'ops1',
@@ -101,6 +130,7 @@ function seed() {
       { id: 'K-s2', seller_id: 's2', status: 'pending', account_last4: null },
       { id: 'K-s3', seller_id: 's3', status: 'pending', account_last4: null }
     ],
+    requirements: [],
     tokens: [],
     sessions: [],
     messages: [],

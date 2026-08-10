@@ -90,6 +90,7 @@ router.get('/api/state', requireBearer, (req, res) => {
       wa_id: u.wa_id,
       city: u.city
     })),
+    requirements: mine(req.user, d.requirements || []),
     listings: mine(req.user, d.listings),
     bids: mine(req.user, d.bids),
     kyc: mine(req.user, d.kyc),

@@ -2,22 +2,184 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Rapidue</title>
-  <link rel="stylesheet" href="/styles.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#ffffff" />
+  <title>Buyer Portal</title>
+  <style>
+    /* Deliberately self-contained: this page is a light-themed buyer portal and
+       shares nothing with the dark ops console's stylesheet. */
+    :root {
+      --ink: #0f1720;
+      --muted: #6b7480;
+      --line: #e6e8eb;
+      --green: #12813f;
+      --green-dark: #0d5c2d;
+      --bg: #ffffff;
+      --card: #ffffff;
+      --disabled: #eceef0;
+      --disabled-ink: #9aa1a9;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; background: var(--bg); color: var(--ink); }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+      font-size: 16px;
+      line-height: 1.45;
+      padding-bottom: 40px;
+    }
+
+    .topbar {
+      display: flex; align-items: center; gap: 14px;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--line);
+      position: sticky; top: 0; background: var(--bg); z-index: 5;
+    }
+    .burger {
+      width: 44px; height: 44px; border: 1px solid var(--line); border-radius: 12px;
+      display: grid; place-content: center; gap: 4px; background: none; cursor: pointer;
+    }
+    .burger span { display: block; width: 18px; height: 2px; background: var(--ink); border-radius: 2px; }
+    .topbar h1 { font-size: 20px; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
+
+    .wrap { max-width: 560px; margin: 0 auto; padding: 22px 18px 0; }
+
+    .eyebrow {
+      display: flex; align-items: center; gap: 8px;
+      color: var(--green); font-size: 12.5px; font-weight: 700;
+      letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 14px;
+    }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--green); flex: none; }
+
+    h2.greet {
+      font-size: 30px; line-height: 1.16; font-weight: 800;
+      letter-spacing: -0.02em; margin: 0 0 14px;
+    }
+    p.ask { font-size: 19px; font-weight: 600; line-height: 1.35; margin: 0 0 20px; }
+    p.ask em { font-style: normal; color: var(--green); }
+
+    .card {
+      border: 1px solid var(--line); border-radius: 16px;
+      background: var(--card); padding: 18px; margin-bottom: 16px;
+    }
+    .label {
+      font-size: 12px; font-weight: 700; color: var(--muted);
+      letter-spacing: 0.07em; text-transform: uppercase;
+    }
+
+    .price {
+      display: flex; align-items: center; gap: 10px;
+      border: 1px solid var(--line); border-radius: 14px;
+      padding: 14px 16px; margin-top: 12px;
+    }
+    .price:focus-within { border-color: var(--green); box-shadow: 0 0 0 3px rgba(18,129,63,0.10); }
+    .price .rupee { font-size: 22px; color: var(--muted); }
+    .price input {
+      flex: 1; min-width: 0; border: 0; outline: none; background: none;
+      font: 700 30px/1.1 inherit; color: var(--ink); letter-spacing: -0.02em;
+    }
+    .price input::placeholder { color: #c2c7cd; font-weight: 700; }
+    .price .unit { color: var(--muted); font-size: 16px; }
+
+    .rule { height: 1px; background: var(--line); margin: 18px -18px; }
+
+    .validrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .validrow .left { display: flex; align-items: center; gap: 9px; }
+    .hrs { display: flex; align-items: center; gap: 8px; }
+    .hrs input {
+      width: 74px; text-align: center; font: 600 17px inherit; color: var(--ink);
+      border: 1px solid var(--line); border-radius: 11px; padding: 9px 6px; outline: none; background: none;
+    }
+    .hrs input:focus { border-color: var(--green); }
+    .hrs span { color: var(--muted); font-size: 15px; }
+
+    .defaults-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+    .sub { color: var(--muted); font-size: 14.5px; margin: 6px 0 14px; }
+    .editlink {
+      display: inline-flex; align-items: center; gap: 6px;
+      color: var(--green); font-weight: 700; font-size: 15px;
+      background: none; border: 0; padding: 0; cursor: pointer;
+    }
+
+    .row {
+      display: flex; align-items: center; gap: 13px;
+      border: 1px solid var(--line); border-radius: 13px;
+      padding: 13px 14px; margin-bottom: 11px;
+    }
+    .row .ico {
+      width: 38px; height: 38px; border-radius: 10px; flex: none;
+      border: 1px solid var(--line); display: grid; place-content: center; color: var(--green);
+    }
+    .row .k { font-size: 11.5px; font-weight: 700; color: var(--muted); letter-spacing: 0.07em; text-transform: uppercase; }
+    .row .v { font-size: 16.5px; font-weight: 700; letter-spacing: -0.01em; }
+    .row .v input, .row .v select {
+      font: 700 16.5px inherit; color: var(--ink); border: 0; border-bottom: 1px dashed var(--green);
+      background: none; outline: none; padding: 0 0 2px; width: 100%;
+    }
+
+    .profilelink {
+      display: inline-block; color: var(--green); font-weight: 700;
+      font-size: 15.5px; text-decoration: none; margin-top: 4px;
+    }
+
+    .cta {
+      width: 100%; border: 0; border-radius: 14px; cursor: pointer;
+      background: linear-gradient(180deg, #178b45 0%, var(--green-dark) 100%);
+      color: #fff; font: 700 18px inherit; letter-spacing: -0.01em;
+      padding: 19px 20px; margin-top: 6px;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+    }
+    .cta:disabled { background: var(--disabled); color: var(--disabled-ink); cursor: not-allowed; }
+    .foot { text-align: center; color: var(--muted); font-size: 14.5px; margin: 12px 0 0; }
+    .err { color: #c0392b; font-size: 14.5px; text-align: center; margin: 10px 0 0; min-height: 20px; }
+
+    .done { text-align: center; padding: 26px 0 10px; }
+    .done .tick {
+      width: 62px; height: 62px; border-radius: 50%; background: #e8f5ed; color: var(--green);
+      display: grid; place-content: center; margin: 0 auto 16px;
+    }
+    .done h3 { font-size: 23px; font-weight: 800; margin: 0 0 6px; letter-spacing: -0.02em; }
+
+    .expired { padding: 40px 18px; text-align: center; }
+    .expired h3 { font-size: 22px; font-weight: 800; margin: 0 0 8px; }
+  </style>
 </head>
 <body>
-<div class="landing">
-  <div id="root" class="muted">Opening your portal…</div>
+
+<div class="topbar">
+  <button class="burger" aria-label="Menu"><span></span><span></span><span></span></button>
+  <h1>Buyer Portal</h1>
 </div>
+
+<div class="wrap" id="root"><p style="color:#6b7480">Opening your portal…</p></div>
 
 <script>
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const money = (n) => '₹' + Number(n).toLocaleString('en-IN');
-let S = null;
+let S = null, editing = false;
 
-async function call(path, body) {
+const ICONS = {
+  layers: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>',
+  pin: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>',
+  rupee: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 3h12M6 8h12M16 3c0 5-4 5-7 5 4 0 7 3 7 8"/><path d="M9 16h2"/></svg>',
+  cal: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 11h18"/></svg>',
+  star: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="m12 3 2.7 5.6 6.3.9-4.5 4.4 1 6.1-5.5-2.9-5.5 2.9 1-6.1L3 9.5l6.3-.9L12 3Z"/></svg>',
+  clock: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  pencil: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"/></svg>',
+  tick: '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m20 6-11 11-5-5"/></svg>'
+};
+
+function greeting(d = new Date()) {
+  const h = d.getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 17) return 'Good afternoon';
+  if (h < 21) return 'Good evening';
+  return 'Good night';
+}
+
+const inr = (n) => Number(n).toLocaleString('en-IN');
+const dateStr = (ms) => new Date(ms).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+
+async function post(path, body) {
   const res = await fetch(path, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -28,172 +190,143 @@ async function call(path, body) {
   return out;
 }
 
-function dead(state) {
-  document.body.innerHTML = `
-    <div class="landing">
-      <div class="banner dead">
-        <h2 style="margin:0 0 4px">You've been signed out</h2>
-        <p class="muted" style="margin:0">${state === 'absolute_expired'
-          ? 'This session reached its maximum length.'
-          : 'You were away for a while, so we closed the session.'}</p>
+function expired(state) {
+  $('#root').innerHTML = `
+    <div class="expired">
+      <h3>You've been signed out</h3>
+      <p style="color:#6b7480;margin:0 0 6px">${
+        state === 'absolute_expired' ? 'This session reached its maximum length.' : 'You were away for a while.'
+      }</p>
+      <p style="color:#6b7480;margin:0">Your link doesn't expire — tap the button in your WhatsApp message again.</p>
+    </div>`;
+}
+
+function row(icon, k, v, editHtml) {
+  return `
+    <div class="row">
+      <div class="ico">${ICONS[icon]}</div>
+      <div style="flex:1;min-width:0">
+        <div class="k">${esc(k)}</div>
+        <div class="v">${editing && editHtml ? editHtml : esc(v)}</div>
       </div>
-      <p class="muted small">Your link doesn't expire — tap the button in your WhatsApp message again to come straight back in.</p>
     </div>`;
 }
 
 function render() {
-  const s = S.seller, own = S.own;
-  const kyc = own.kyc;
-  const idle = Math.max(0, Math.round(S.idle_ms_left / 1000));
+  const p = S.own.profile || {};
+  const name = (p.company || S.seller.name || '').toUpperCase();
 
   $('#root').innerHTML = `
-    <div class="banner warn">
-      <div class="row" style="justify-content:space-between">
-        <div><strong>${esc(s.name)}</strong> <span class="muted small">${esc(s.city || '')} · +${esc(s.wa_id || '—')}</span></div>
-        <span class="pill active">permanent link</span>
-      </div>
-      <div class="small muted" style="margin-top:4px">
-        Signed out after <strong id="idle">${idle}s</strong> idle — any action pushes that back out.
-        You only ever see your own material.
-      </div>
-    </div>
+    <div class="eyebrow"><span class="dot"></span>Live marketplace &middot; Materials in stock</div>
+    <h2 class="greet">${esc(greeting())}, ${esc(name)}.</h2>
+    <p class="ask">At what price are you willing to buy <em>${esc(p.material || 'this material')}</em> today?</p>
 
-    <div class="panel">
-      <h2>Your listings</h2>
-      <div class="body">
-        ${own.listings.length ? own.listings.map(l => `
-          <div class="card">
-            <h3>${esc(l.title)}</h3>
-            <div class="row small" style="margin-bottom:8px">
-              <span class="pill ${l.status === 'published' ? 'redeemed' : ''}">${esc(l.status)}</span>
-              ${l.pickup_confirmed ? '<span class="pill active">pickup confirmed</span>' : ''}
-              <span class="muted">pickup ${new Date(l.pickup_at).toLocaleString('en-IN')}</span>
-            </div>
-            <textarea rows="2" data-notes="${l.id}" placeholder="Quantity, quality notes, contact person…">${esc(l.draft_notes || '')}</textarea>
-            <div class="row" style="margin-top:8px">
-              <button class="primary tiny" data-save="${l.id}">Save draft</button>
-              <button class="tiny" data-publish="${l.id}" ${l.status === 'published' ? 'disabled' : ''}>Publish</button>
-              <button class="tiny" data-pickup="${l.id}" ${l.pickup_confirmed ? 'disabled' : ''}>Confirm pickup</button>
-              <span class="ok small" data-msg="${l.id}"></span>
-            </div>
-          </div>`).join('') : '<p class="muted small">Nothing here yet.</p>'}
+    <div class="card">
+      <div class="label">Enter your buying price</div>
+      <div class="price">
+        <span class="rupee">&#8377;</span>
+        <input id="price" type="number" inputmode="decimal" min="1" step="0.5"
+               placeholder="e.g. ${esc(p.last_rate || 38)}" />
+        <span class="unit">/kg</span>
+      </div>
+      <div class="rule"></div>
+      <div class="validrow">
+        <div class="left">${ICONS.clock}<span class="label" style="letter-spacing:0.06em">Price valid till</span></div>
+        <div class="hrs"><input id="hrs" type="number" min="1" max="720" value="48" /><span>hrs</span></div>
       </div>
     </div>
 
-    <div class="panel">
-      <h2>Bids on your material</h2>
-      <div class="body">
-        ${own.bids.length ? own.bids.map(b => `
-          <div class="card">
-            <div class="row" style="justify-content:space-between">
-              <div><strong>${money(b.amount)}</strong> <span class="muted small">from ${esc(b.buyer)}</span></div>
-              <span class="pill ${b.status === 'open' ? 'active' : 'redeemed'}">${esc(b.status)}</span>
-            </div>
-            <div class="row" style="margin-top:8px">
-              <button class="primary tiny" data-accept="${b.id}" ${b.status !== 'open' ? 'disabled' : ''}>Accept</button>
-              <button class="tiny" data-reject="${b.id}" ${b.status !== 'open' ? 'disabled' : ''}>Reject</button>
-              <span class="ok small" data-msg="${b.id}"></span>
-            </div>
-          </div>`).join('') : '<p class="muted small">No bids yet.</p>'}
+    <div class="card">
+      <div class="defaults-head">
+        <div class="label">Applied defaults</div>
+        <button class="editlink" id="editBtn">${ICONS.pencil}${editing ? 'Done' : 'Edit'}</button>
       </div>
+      <p class="sub">From your Profile &middot; editing here applies to this requirement only</p>
+      ${row('layers', 'Material', p.material, `<input id="e_material" value="${esc(p.material || '')}" />`)}
+      ${row('pin', 'Location', p.location, `<input id="e_location" value="${esc(p.location || '')}" />`)}
+      ${row('rupee', 'Payment', p.payment_days + ' days', `<input id="e_payment" type="number" min="0" value="${esc(p.payment_days)}" />`)}
+      ${row('cal', 'Need by', dateStr(p.need_by), `<input id="e_needby" type="date" value="${new Date(p.need_by).toISOString().slice(0,10)}" />`)}
+      ${row('star', 'Min rating', p.min_rating, `<select id="e_rating">
+          ${['Any','3 and above','4 and above','4.5 and above'].map(o => `<option ${o === p.min_rating ? 'selected' : ''}>${o}</option>`).join('')}
+        </select>`)}
+      <a class="profilelink" href="#" id="profileLink">Change your saved defaults in Profile &rarr;</a>
     </div>
 
-    ${kyc ? `
-    <div class="panel">
-      <h2>Bank details &amp; KYC</h2>
-      <div class="body">
-        <p class="muted small">Arriving by link isn't enough here. Bank details need a fresh OTP every time.</p>
-        ${kyc.status !== 'pending'
-          ? `<p class="ok">KYC ${esc(kyc.status)} · account ****${esc(kyc.account_last4)}</p>`
-          : `
-          <div class="row" style="margin-bottom:10px">
-            <button class="tiny" id="sendOtp">Send OTP to +${esc(s.wa_id || '')}</button>
-            <span class="mono small" id="devcode"></span>
-          </div>
-          <div class="row" style="margin-bottom:10px">
-            <input id="code" placeholder="6-digit code" style="max-width:150px" />
-            <button class="tiny" id="verify">Verify</button>
-            <span class="small ${S.otp_fresh ? 'ok' : 'muted'}">${S.otp_fresh ? 'OTP verified' : 'not verified'}</span>
-          </div>
-          <div class="row">
-            <input id="acct" placeholder="Account number" style="max-width:200px" />
-            <button class="primary tiny" id="submitKyc">Submit</button>
-          </div>
-          <p class="err" id="kycErr"></p>`}
-      </div>
-    </div>` : ''}
+    <button class="cta" id="post" disabled>Post Requirement &nbsp;&rarr;</button>
+    <p class="err" id="err"></p>
+    <p class="foot">No forms. No friction. Just describe it.</p>`;
 
-    <p class="small muted">Any request for another seller's listing returns 403, session or no session.</p>`;
+  const price = $('#price');
+  const cta = $('#post');
+  // The button stays dead until a real price is typed - matching the greyed
+  // state in the design.
+  const sync = () => { cta.disabled = !(Number(price.value) > 0); };
+  price.oninput = sync;
+  sync();
+  price.focus();
 
-  wire();
+  $('#editBtn').onclick = () => { editing = !editing; render(); };
+  $('#profileLink').onclick = (e) => {
+    e.preventDefault();
+    $('#err').textContent = 'Profile editing lives in the main app — this link is a placeholder.';
+  };
+
+  cta.onclick = async () => {
+    cta.disabled = true;
+    $('#err').textContent = '';
+    const overrides = editing
+      ? {
+          material: $('#e_material').value.trim(),
+          location: $('#e_location').value.trim(),
+          payment_days: Number($('#e_payment').value),
+          need_by: new Date($('#e_needby').value).getTime(),
+          min_rating: $('#e_rating').value
+        }
+      : {};
+    try {
+      const out = await post('/api/seller/rate', {
+        price: Number(price.value),
+        valid_hrs: Number($('#hrs').value) || 48,
+        overrides
+      });
+      done(out.requirement);
+    } catch (e) {
+      if (String(e.body && e.body.error).startsWith('session_')) return expired(e.body.error);
+      $('#err').textContent = (e.body && e.body.error) || e.message;
+      cta.disabled = false;
+    }
+  };
 }
 
-function say(id, text) {
-  const el = document.querySelector(`[data-msg="${id}"]`);
-  if (el) el.textContent = text;
-}
-
-function wire() {
-  document.querySelectorAll('[data-save]').forEach(b => b.onclick = async () => {
-    const id = b.dataset.save;
-    await call(`/api/seller/listings/${id}/draft`, { notes: document.querySelector(`[data-notes="${id}"]`).value });
-    say(id, 'Saved.');
-    load();
-  });
-  document.querySelectorAll('[data-publish]').forEach(b => b.onclick = async () => {
-    const out = await call(`/api/seller/listings/${b.dataset.publish}/publish`);
-    say(b.dataset.publish, `Published. ${out.tokens_revoked} task link(s) revoked.`);
-    setTimeout(load, 700);
-  });
-  document.querySelectorAll('[data-pickup]').forEach(b => b.onclick = async () => {
-    const out = await call(`/api/seller/listings/${b.dataset.pickup}/pickup`);
-    say(b.dataset.pickup, `Confirmed. ${out.tokens_revoked} task link(s) revoked.`);
-    setTimeout(load, 700);
-  });
-  ['accept', 'reject'].forEach(kind =>
-    document.querySelectorAll(`[data-${kind}]`).forEach(b => b.onclick = async () => {
-      const id = b.dataset[kind];
-      const out = await call(`/api/seller/bids/${id}/${kind}`);
-      say(id, `Bid ${out.bid.status}.`);
-      setTimeout(load, 700);
-    })
-  );
-
-  const kyc = S.own.kyc;
-  if (kyc && $('#sendOtp')) {
-    $('#sendOtp').onclick = async () => {
-      const out = await call(`/api/seller/kyc/${kyc.id}/otp`);
-      $('#devcode').textContent = 'test code: ' + out.dev_code;
-    };
-    $('#verify').onclick = async () => {
-      $('#kycErr').textContent = '';
-      try { await call(`/api/seller/kyc/${kyc.id}/verify`, { code: $('#code').value.trim() }); load(); }
-      catch (e) { $('#kycErr').textContent = e.body.error; }
-    };
-    $('#submitKyc').onclick = async () => {
-      $('#kycErr').textContent = '';
-      try { await call(`/api/seller/kyc/${kyc.id}/submit`, { account_last4: $('#acct').value.trim() }); load(); }
-      catch (e) { $('#kycErr').textContent = e.body.error === 'otp_required' ? 'Verify a fresh OTP first.' : e.body.error; }
-    };
-  }
+function done(r) {
+  $('#root').innerHTML = `
+    <div class="done">
+      <div class="tick">${ICONS.tick}</div>
+      <h3>Requirement posted</h3>
+      <p style="color:#6b7480;margin:0 0 18px">
+        &#8377;${inr(r.price_per_kg)}/kg for ${esc(r.material)} &middot; valid ${r.valid_hrs} hrs
+      </p>
+    </div>
+    <div class="card">
+      ${row('layers', 'Material', r.material)}
+      ${row('pin', 'Location', r.location)}
+      ${row('rupee', 'Payment', r.payment_days + ' days')}
+      ${row('cal', 'Need by', dateStr(r.need_by))}
+      ${row('star', 'Min rating', r.min_rating)}
+    </div>
+    <button class="cta" id="again">Change my price &nbsp;&rarr;</button>
+    <p class="foot">Reference ${esc(r.id)}</p>`;
+  $('#again').onclick = () => load();
 }
 
 async function load() {
   const res = await fetch('/api/session');
-  if (!res.ok) { const b = await res.json().catch(() => ({})); return dead(b.state); }
+  if (!res.ok) { const b = await res.json().catch(() => ({})); return expired(b.state); }
   S = await res.json();
   if (S.intent !== 'seller_portal') return (location.href = '/land.html' + location.search);
+  editing = false;
   render();
 }
-
-// Local countdown only; the server is the authority and 401s when it truly lapses.
-setInterval(() => {
-  if (!S) return;
-  S.idle_ms_left -= 1000;
-  const el = document.getElementById('idle');
-  if (el) el.textContent = Math.max(0, Math.round(S.idle_ms_left / 1000)) + 's';
-  if (S.idle_ms_left < -1000) load();
-}, 1000);
 
 load();
 </script>

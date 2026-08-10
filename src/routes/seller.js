@@ -75,6 +75,8 @@ router.get('/api/session', (req, res) => {
     resource: portal ? null : resourceFor(intent, session.resource_id),
     own: portal
       ? {
+          profile: seller.profile || null,
+          latest: d.requirements.filter((r) => r.seller_id === seller.id)[0] || null,
           listings: d.listings.filter((l) => l.seller_id === seller.id),
           bids: d.bids.filter((b) => b.seller_id === seller.id),
           kyc: d.kyc.find((k) => k.seller_id === seller.id) || null
@@ -85,6 +87,56 @@ router.get('/api/session', (req, res) => {
     absolute_ms_left: session.absolute_expires_at - now(),
     otp_fresh: !!session.otp_verified_at && now() - session.otp_verified_at <= OTP_FRESH_MS
   });
+});
+
+/* ------------------------- buying rate (portal) ------------------------- */
+
+/**
+ * The one thing the campaign landing page does: post a buying price. Only a
+ * seller_portal session may do it, and only ever for itself - the seller id
+ * comes from the session, never from the request body.
+ */
+router.post('/api/seller/rate', requireSession, (req, res) => {
+  if (req.session.intent !== 'seller_portal') {
+    return res.status(403).json({ error: 'wrong_intent', have: req.session.intent, need: 'seller_portal' });
+  }
+
+  const price = Number((req.body && req.body.price) || 0);
+  if (!(price > 0)) return res.status(400).json({ error: 'price_required' });
+
+  const validHrs = Math.max(1, Math.min(720, Number((req.body && req.body.valid_hrs) || 48)));
+  const d = db();
+  const seller = d.users.find((u) => u.id === req.session.seller_id);
+  const o = (req.body && req.body.overrides) || {};
+  const base = seller.profile || {};
+
+  const requirement = {
+    id: 'R-' + Math.random().toString(36).slice(2, 8).toUpperCase(),
+    seller_id: seller.id,
+    price_per_kg: price,
+    valid_hrs: validHrs,
+    valid_till: now() + validHrs * 3600 * 1000,
+    // Edits here apply to this requirement only - the profile is left alone.
+    material: o.material || base.material,
+    location: o.location || base.location,
+    payment_days: o.payment_days == null ? base.payment_days : Number(o.payment_days),
+    need_by: o.need_by == null ? base.need_by : Number(o.need_by),
+    min_rating: o.min_rating || base.min_rating,
+    posted_at: now(),
+    session_id: req.session.id
+  };
+
+  d.requirements.unshift(requirement);
+  d.requirements = d.requirements.slice(0, 100);
+  if (seller.profile) seller.profile.last_rate = price;
+  save();
+
+  logEvent('rate.posted', `${seller.name} posted Rs ${price}/kg for ${requirement.material}`, {
+    seller_id: seller.id,
+    resource_id: requirement.id
+  });
+
+  res.json({ ok: true, requirement });
 });
 
 /* ---------------------------- listing_draft ---------------------------- */
