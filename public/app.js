@@ -23,7 +23,9 @@ const DEFAULT_PARAMS = [
 const send = {
   provider: localStorage.getItem('send.provider') || 'simulate',
   mode: localStorage.getItem('send.mode') || 'text',
-  template: localStorage.getItem('send.template') || '',
+  // WATI elementName of the approved rate-confirmation template. Its button is a
+  // dynamic URL on .../s/{{1}} with buttonParamMapping.paramName = "1".
+  template: localStorage.getItem('send.template') || 'omp_test_token_buyer1',
   paramsText: localStorage.getItem('send.paramsText') || DEFAULT_PARAMS
 };
 
