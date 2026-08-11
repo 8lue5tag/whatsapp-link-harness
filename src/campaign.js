@@ -107,7 +107,9 @@ function campaignLinks(baseUrl, sellerIds) {
     } else {
       Object.assign(entry, {
         lots_token: secret,
-        lots_url: `${baseUrl}/s/${secret}`,
+        // Its own base. /s/<same token> also works, so anything already sent
+        // keeps opening - but a new template should be approved against this.
+        lots_url: `${baseUrl}/lots/${secret}`,
         lots_status: row.status,
         lots_use_count: row.use_count
       });

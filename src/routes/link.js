@@ -15,11 +15,25 @@ function baseUrl(req) {
   return `${req.protocol}://${req.get('host')}`;
 }
 
+// Where each intent lands once its token has been redeemed. A campaign token
+// opens a whole screen (price or lot board); a task token opens its one task.
+const PAGES = { seller_portal: '/portal.html', lot_select: '/lots.html' };
+
 /**
  * The landing route. Hash the incoming token, look it up, check the ceiling,
  * and on success mint a scoped session cookie. The token has now done its job.
+ *
+ * Mounted on more than one base, because a Meta template freezes its URL base at
+ * approval and the base is the only part that can't change afterwards:
+ *
+ *   /s/{{1}}    - the original, frozen into the approved price-screen template
+ *   /lots/{{1}} - for the lot-review template
+ *
+ * The destination still comes from the token's intent, not from the path, so a
+ * token opens the same page whichever base it arrives on. The separate bases are
+ * for legibility in the template builder, not for routing.
  */
-router.get('/s/:token', (req, res) => {
+function landing(req, res) {
   const secret = req.params.token;
   const result = redeemToken(secret);
 
@@ -30,12 +44,12 @@ router.get('/s/:token', (req, res) => {
 
   createSession(res, result.row);
   const q = new URLSearchParams({ intent: result.row.intent, r: result.row.resource_id });
-  // A campaign token opens a whole screen (price or lot board); a task token
-  // opens the single task it was minted for.
-  const PAGES = { seller_portal: '/portal.html', lot_select: '/lots.html' };
   const page = PAGES[result.row.intent] || '/land.html';
   return res.redirect(page + '?' + q.toString());
-});
+}
+
+router.get('/s/:token', landing);
+router.get('/lots/:token', landing);
 
 /**
  * The dead-link page's only button. Looks the old token up by hash (whatever its
