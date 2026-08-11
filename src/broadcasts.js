@@ -10,6 +10,25 @@
 // price screen, so both ride `seller_portal` and its frozen /s/{{1}} base - the
 // same base an already-approved template was built against. Only the lot deck
 // needs the second base, /lots/{{1}}.
+// Step 0, and the odd one out: it goes to numbers that are not in the set yet,
+// so it has no recipient list to select from and no token to carry. Its button is
+// a STATIC url on /join - approved once, never varies, nothing to fill in.
+const INVITE = {
+  key: 'invite',
+  label: 'Invite to onboard',
+  template: 'omp_test_buyer_welcome',
+  path: '/join',
+  copy: {
+    name: 'omp_test_buyer_welcome',
+    button: 'Recycler',
+    body:
+      'Hi 👋 Welcome to Recykal.Market!\n\n' +
+      "We're India's largest circular economy marketplace — connecting scrap sellers, " +
+      'recyclers and businesses to trade materials, get fair prices and stay compliant.\n\n' +
+      'Join 1000+ Sellers, 200+ Recyclers moving 10000+ MTs/month'
+  }
+};
+
 const BROADCASTS = {
   onboarding_approved: {
     key: 'onboarding_approved',
@@ -84,4 +103,4 @@ const BROADCASTS = {
   }
 };
 
-module.exports = { BROADCASTS };
+module.exports = { BROADCASTS, INVITE };

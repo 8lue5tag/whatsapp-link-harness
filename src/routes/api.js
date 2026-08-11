@@ -6,10 +6,10 @@ const clock = require('../clock');
 const { INTENTS, USE_ALERT_THRESHOLD } = require('../intents');
 const { issueToken, revokeToken, sweep, logEvent, resourceFor, ownerOf } = require('../tokens');
 const { issueBearer, requireBearer } = require('../auth');
-const { sendTemplate, sendMode } = require('../whatsapp');
+const { sendTemplate, sendInvite, sendMode } = require('../whatsapp');
 const { campaignLinks, campaignSecretFor, ensureCampaignTokens } = require('../campaign');
-const { BROADCASTS } = require('../broadcasts');
-const { allSignups, markApproved } = require('../signup');
+const { BROADCASTS, INVITE } = require('../broadcasts');
+const { allSignups, markApproved, normalizePhone, isValidPhone, findByPhone } = require('../signup');
 
 const router = express.Router();
 router.use(express.json());
@@ -124,6 +124,7 @@ router.get('/api/state', requireBearer, (req, res) => {
           opened: (linkFor.get(u.id) || {}).use_count || 0
         }))
       : [],
+    invite: { template: INVITE.template, label: INVITE.label, path: INVITE.path },
     broadcasts: Object.values(BROADCASTS).map((b) => ({
       key: b.key,
       label: b.label,
@@ -317,6 +318,66 @@ router.post('/api/campaign/send', requireBearer, wrap(async (req, res) => {
     send_mode: msg.send_mode,
     status: msg.provider_status,
     response: msg.provider_response
+  });
+}));
+
+/**
+ * The invite, to numbers that are not in the set yet. Takes raw pasted text -
+ * one per line, commas, +91 prefixes, whatever came out of a spreadsheet - and
+ * normalises it, because the alternative is an ops person reformatting a list by
+ * hand and a typo silently costing a real send.
+ *
+ * Numbers that already signed up are reported and skipped rather than sent to:
+ * re-inviting someone who is already inside is how a marketing template gets
+ * reported as spam.
+ */
+router.post('/api/campaign/invite', requireBearer, requireOps, wrap(async (req, res) => {
+  const { phones, provider, mode, template } = req.body || {};
+  // Lines, commas and semicolons only - never spaces. "+91 98765 43211" is one
+  // number with spaces in it, and splitting on whitespace turns it into three
+  // pieces of garbage.
+  const raw = Array.isArray(phones) ? phones : String(phones || '').split(/[\n\r,;]+/);
+
+  const seen = new Set();
+  const bad = [];
+  const skipped = [];
+  const targets = [];
+  for (const one of raw) {
+    if (!String(one || '').trim()) continue;
+    const wa = normalizePhone(one);
+    if (!isValidPhone(wa)) { bad.push(String(one).trim()); continue; }
+    if (seen.has(wa)) continue;
+    seen.add(wa);
+    const already = findByPhone(wa);
+    if (already) { skipped.push({ wa_id: wa, name: already.name, status: already.status }); continue; }
+    targets.push(wa);
+  }
+
+  if (!targets.length) return res.status(400).json({ error: 'no_recipients', invalid: bad, skipped });
+
+  const results = [];
+  for (const wa of targets) {
+    const msg = await sendInvite({
+      wa_id: wa,
+      baseUrl: baseUrl(req),
+      send: { provider, mode, template }
+    });
+    results.push({
+      wa_id: wa,
+      ok: msg.provider_ok !== false,
+      status: msg.provider_status,
+      response: msg.provider_response
+    });
+  }
+
+  res.json({
+    ok: results.every((r) => r.ok),
+    url: `${baseUrl(req)}${INVITE.path}`,
+    sent: results.filter((r) => r.ok).length,
+    failed: results.filter((r) => !r.ok).length,
+    invalid: bad,
+    skipped,
+    results
   });
 }));
 

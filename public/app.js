@@ -295,33 +295,64 @@ const selected = new Set();
 // seller_id -> what the provider said about the last broadcast to them.
 const bcastResults = new Map();
 let lastBroadcast = '';
+// The pasted invite list, held across the 2s refresh like everything else here.
+let inviteText = '';
+let lastInvite = '';
 
 const tplFor = (key, fallback) => localStorage.getItem('bcast.tpl.' + key) || fallback;
 
 function renderSignups() {
   const el = $('#signups');
-  // Never rip the DOM out from under someone typing a template name.
-  if (el.contains(document.activeElement) && document.activeElement.tagName === 'INPUT'
-      && document.activeElement.type === 'text') return;
+  // Never rip the DOM out from under someone typing a template name or pasting a
+  // list of numbers - the panel is redrawn every two seconds.
+  const focus = document.activeElement;
+  if (el.contains(focus) && (focus.tagName === 'TEXTAREA' || (focus.tagName === 'INPUT' && focus.type === 'text'))) return;
 
   const rows = state.signups || [];
   const casts = state.broadcasts || [];
   for (const id of [...selected]) if (!rows.some((r) => r.id === id)) selected.delete(id);
 
+  const inv = state.invite || {};
+  // Step 0. Its own box, because its recipients are by definition not in the
+  // list below - there is nothing to tick.
   const joinRow = `
-    <div class="row small" style="margin-bottom:10px">
-      <span class="muted">public onboarding link</span>
-      <span class="mono" style="color:var(--blue);word-break:break-all">${esc(state.join_url || '/join')}</span>
-      <button class="tiny" data-copy-url="${esc(state.join_url || '')}">copy</button>
-      <a class="small" href="${esc(state.join_url || '/join')}" target="_blank" rel="noopener">open</a>
+    <div class="card" style="margin-bottom:12px">
+      <div class="row small" style="margin-bottom:6px">
+        <span class="muted">public onboarding link</span>
+        <span class="mono" style="color:var(--blue);word-break:break-all">${esc(state.join_url || '/join')}</span>
+        <button class="tiny" data-copy-url="${esc(state.join_url || '')}">copy</button>
+        <a class="small" href="${esc(state.join_url || '/join')}" target="_blank" rel="noopener">open</a>
+      </div>
+      <textarea id="inviteBox" rows="2" class="mono" placeholder="9876543210, +91 98765 43211 — one per line or comma separated"
+                style="margin-top:4px">${esc(inviteText)}</textarea>
+      <div class="row small" style="margin-top:4px;flex-wrap:nowrap">
+        <button class="tiny primary" id="inviteBtn" style="white-space:nowrap">${esc(inv.label || 'Invite to onboard')}</button>
+        <input class="mono" style="flex:1;min-width:0;padding:3px 8px"
+               data-tpl-for="invite" value="${esc(tplFor('invite', inv.template || ''))}" />
+      </div>
+      <p class="small muted" style="margin:6px 0 0">
+        Static URL button on ${esc(inv.path || '/join')} — no token, no parameters. Numbers already
+        in the list below are skipped.
+      </p>
+      <div class="small" id="inviteOut" style="margin-top:4px">${esc(lastInvite)}</div>
     </div>`;
+
+  // Both branches draw the invite box, so both have to wire it up.
+  const wireInvite = () => {
+    const box = $('#inviteBox');
+    if (box) box.oninput = () => (inviteText = box.value);
+    el.querySelectorAll('[data-tpl-for]').forEach((i) => {
+      i.oninput = () => localStorage.setItem('bcast.tpl.' + i.dataset.tplFor, i.value);
+    });
+  };
 
   if (!rows.length) {
     el.innerHTML = joinRow +
       `<p class="muted small" style="margin-bottom:0">
-         Nobody has signed up yet. Open the link above, finish the flow, and the number appears here.
+         Nobody has signed up yet. Send the invite above, or open the link and finish the flow —
+         either way the number appears here.
        </p>`;
-    return;
+    return wireInvite();
   }
 
   const approved = rows.filter((r) => r.status === 'approved').length;
@@ -398,9 +429,7 @@ function renderSignups() {
       renderSignups();
     };
   });
-  el.querySelectorAll('[data-tpl-for]').forEach((i) => {
-    i.oninput = () => localStorage.setItem('bcast.tpl.' + i.dataset.tplFor, i.value);
-  });
+  wireInvite();
 }
 
 function renderCampaign() {
@@ -608,6 +637,41 @@ document.addEventListener('click', async (ev) => {
     } catch (err) {
       out.className = 'small err';
       out.textContent = err.body ? JSON.stringify(err.body) : err.message;
+    }
+    t.disabled = false;
+    return refresh();
+  }
+
+  if (t.id === 'inviteBtn') {
+    const box = $('#inviteBox');
+    inviteText = box.value;
+    if (!inviteText.trim()) return alert('Paste at least one number first.');
+
+    const out = $('#inviteOut');
+    t.disabled = true;
+    out.className = 'small muted';
+    out.textContent = `sending via ${send.provider}…`;
+    try {
+      const r = await api('/api/campaign/invite', {
+        method: 'POST',
+        body: JSON.stringify({
+          phones: inviteText,
+          provider: send.provider,
+          mode: send.mode,
+          template: tplFor('invite', (state.invite || {}).template)
+        })
+      });
+      lastInvite = `${r.sent} sent, ${r.failed} failed` +
+        (r.skipped.length ? ` · ${r.skipped.length} already signed up` : '') +
+        (r.invalid.length ? ` · ignored: ${r.invalid.join(', ')}` : '');
+      if (r.sent) inviteText = '';
+    } catch (err) {
+      const b = err.body || {};
+      lastInvite = b.error === 'no_recipients'
+        ? 'Nothing to send: ' +
+          (b.skipped && b.skipped.length ? `${b.skipped.length} already signed up. ` : '') +
+          (b.invalid && b.invalid.length ? `couldn't read: ${b.invalid.join(', ')}` : '')
+        : (b.error || err.message);
     }
     t.disabled = false;
     return refresh();

@@ -53,6 +53,29 @@ the scoped sessions, the token ledger — works on them with no special case. Th
 are kept out of the *Test users* and *Campaign links* panels and given their own
 **Signups** panel, because those two lists would otherwise grow without limit.
 
+### Step 0: the invite
+
+The only send here that carries **no token**. `omp_test_buyer_welcome` goes to
+numbers that are not in the set yet, so there is no seller row to scope it to and
+nothing to select — it gets its own box at the top of the Signups panel: paste
+numbers, press send.
+
+Its button is a **static** URL on `/join`, not a dynamic one. Nothing varies,
+nothing needs filling in, and a forwarded copy leaks nothing — which is also why
+it needed no parameters and worked the moment it was approved.
+
+```
+omp_test_buyer_welcome             MARKETING · APPROVED
+  Hi 👋 Welcome to Recykal.Market! …
+  button "Recycler" -> https://whatsapp-link-harness.onrender.com/join
+```
+
+Numbers split on **lines, commas and semicolons — never spaces**, because
+`+91 98765 43211` is one number with spaces in it. Anything unreadable is
+reported back rather than silently dropped, and numbers already in the set are
+skipped: re-inviting someone who is already inside is how a marketing template
+gets reported as spam.
+
 ### Three broadcasts, fired by hand
 
 The Signups panel has checkboxes and three buttons. Each sends one message per
@@ -112,10 +135,11 @@ cannot set a material we don't trade.
 ### The whole loop
 
 ```
-/join  → number captured → docs → "we'll get back to you"
-       → ops: Approve & notify  → WhatsApp → /s/<token> → pick PET Clear → post price
-       → ops: Send lots         → WhatsApp → /lots/<token> → approve lots → order
-       → ops: Send price nudge  → WhatsApp → /s/<token> → confirm or change the price
+ops: Invite to onboard  → WhatsApp → "Recycler" → /join
+                        → number captured → docs → "we'll get back to you"
+ops: Approve & notify   → WhatsApp → /s/<token>    → pick PET Clear → post price
+ops: Send lots          → WhatsApp → /lots/<token> → approve lots → order
+ops: Send price nudge   → WhatsApp → /s/<token>    → confirm or change the price
 ```
 
 ## Permanent campaign links
@@ -318,6 +342,7 @@ POST /api/tokens/:id/revoke   bearer
 POST /api/dev/clock           bearer; {advance_ms} | {reset:true}
 POST /api/dev/reset           bearer; reseed
 
+POST /api/campaign/invite     bearer, ops; {phones} -> the welcome template, no token
 POST /api/campaign/broadcast  bearer, ops; {broadcast,seller_ids[]} -> one send each
 
 POST /api/signup/otp          public; {phone} -> mock code

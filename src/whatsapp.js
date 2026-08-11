@@ -5,6 +5,7 @@ const { db, save } = require('./db');
 const { now } = require('./clock');
 const { logEvent } = require('./tokens');
 const providers = require('./providers');
+const { INVITE } = require('./broadcasts');
 
 // Meta constraint: in an approved template the variable can only sit at the END
 // of the URL. So the route ends in {{1}} and nothing follows it - no path
@@ -230,6 +231,79 @@ async function sendTemplate({ seller, intent, resource, secret, baseUrl, note, s
   return msg;
 }
 
+/**
+ * The invite, and the one send in this harness that carries no token.
+ *
+ * Everything else here is a link to something a known person owns, so it needs a
+ * seller row, a scope and a 22-char secret. The welcome message is the opposite:
+ * it goes to people we have never seen, and its button is a STATIC url button on
+ * /join - no variable, nothing to fill in, nothing to leak if it is forwarded.
+ * That is also why it needs no parameters and works the moment it is approved.
+ */
+async function sendInvite({ wa_id, baseUrl, send }) {
+  const d = db();
+  const opts = send || {};
+  const providerKey = opts.provider || process.env.SEND_PROVIDER || 'simulate';
+  const mode = opts.mode || process.env.SEND_MODE || 'text';
+  const templateId = opts.template || process.env.TEMPLATE_INVITE || INVITE.template;
+  const url = `${baseUrl}${INVITE.path}`;
+  const bodyText = INVITE.copy.body;
+
+  const msg = {
+    id: 'm_' + crypto.randomBytes(6).toString('hex'),
+    at: now(),
+    wa_id,
+    // No seller yet - that is the whole point of this message.
+    seller_id: null,
+    template: mode === 'template' ? templateId || '(none given)' : INVITE.copy.name,
+    body: bodyText,
+    button_label: INVITE.copy.button,
+    url,
+    intent: 'invite',
+    resource_id: null,
+    note: INVITE.label,
+    provider: providerKey,
+    send_mode: mode,
+    params_sent: null,
+    channel: providerKey,
+    provider_ok: null,
+    provider_status: null,
+    provider_response: null,
+    provider_request: null
+  };
+
+  if (providerKey === 'simulate') {
+    msg.provider_ok = true;
+    logEvent('whatsapp.sent', `Simulated ${msg.template} to +${wa_id}`, { message_id: msg.id });
+  } else {
+    const out = await providers.send({
+      providerKey,
+      mode,
+      env: process.env,
+      destination: wa_id,
+      text: `${bodyText}\n\n${url}`,
+      templateId,
+      // A static url button takes no parameters at all.
+      params: [],
+      renderedText: `${bodyText}\n\n${url}`
+    });
+    msg.provider_ok = out.ok;
+    msg.provider_status = out.status;
+    msg.provider_response = out.response;
+    msg.provider_request = out.request;
+    logEvent(
+      out.ok ? 'whatsapp.sent' : 'whatsapp.error',
+      `invite ${providerKey}/${mode} -> +${wa_id}: HTTP ${out.status} ${String(out.detail || out.response).slice(0, 160)}`,
+      { message_id: msg.id }
+    );
+  }
+
+  d.messages.unshift(msg);
+  d.messages = d.messages.slice(0, 60);
+  save();
+  return msg;
+}
+
 /** What the console shows in its header and send panel. */
 function sendMode() {
   return {
@@ -239,4 +313,4 @@ function sendMode() {
   };
 }
 
-module.exports = { sendTemplate, sendMode, TEMPLATES, TEMPLATE_URL };
+module.exports = { sendTemplate, sendInvite, sendMode, TEMPLATES, TEMPLATE_URL };
