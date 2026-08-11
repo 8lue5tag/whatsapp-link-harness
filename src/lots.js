@@ -6,7 +6,7 @@ const { now } = require('./clock');
 // Bump when the shape or the contents of the board change. An existing
 // data/db.json (Render's disk, or a local one from an earlier build) re-seeds
 // itself on the next boot instead of needing a manual reset.
-const LOTS_VERSION = 2;
+const LOTS_VERSION = 3;
 
 /**
  * The review deck. Marketplace-wide and reviewed one lot at a time: the buyer
@@ -29,6 +29,7 @@ function defaultLots() {
       rate_per_kg: 24000,
       seller_rating: null,
       payment_terms_days: 15,
+      images: ['/img/lots/pet-clear-1.jpg', '/img/lots/pet-clear-2.jpg'],
       photos: 2,
       past_orders: 0,
       geo_verified: null,
@@ -48,7 +49,8 @@ function defaultLots() {
       rate_per_kg: 29,
       seller_rating: 7.4,
       payment_terms_days: 30,
-      photos: 4,
+      images: ['/img/lots/pet-mixed-1.jpg', '/img/lots/pet-mixed-2.jpg'],
+      photos: 2,
       past_orders: 6,
       geo_verified: true,
       distance_km: 41,
@@ -67,7 +69,8 @@ function defaultLots() {
       rate_per_kg: 28,
       seller_rating: 9.1,
       payment_terms_days: 30,
-      photos: 9,
+      images: ['/img/lots/hdpe-1.jpg', '/img/lots/hdpe-2.jpg'],
+      photos: 2,
       past_orders: 14,
       geo_verified: true,
       distance_km: 118,
@@ -86,7 +89,8 @@ function defaultLots() {
       rate_per_kg: 12.5,
       seller_rating: 6.8,
       payment_terms_days: 45,
-      photos: 3,
+      images: ['/img/lots/paper-1.jpg', '/img/lots/paper-2.jpg'],
+      photos: 2,
       past_orders: 2,
       geo_verified: false,
       distance_km: 620,
@@ -105,7 +109,8 @@ function defaultLots() {
       rate_per_kg: 145,
       seller_rating: 9.6,
       payment_terms_days: 15,
-      photos: 7,
+      images: ['/img/lots/alu-1.jpg', '/img/lots/alu-2.jpg'],
+      photos: 2,
       past_orders: 21,
       geo_verified: true,
       distance_km: 355,
@@ -124,6 +129,7 @@ function defaultLots() {
       rate_per_kg: 41,
       seller_rating: 8.0,
       payment_terms_days: 30,
+      images: [],
       photos: 0,
       past_orders: 0,
       geo_verified: null,
@@ -143,7 +149,8 @@ function defaultLots() {
       rate_per_kg: 36,
       seller_rating: 7.9,
       payment_terms_days: 30,
-      photos: 5,
+      images: [],
+      photos: 0,
       past_orders: 4,
       geo_verified: true,
       distance_km: 210,
@@ -162,7 +169,8 @@ function defaultLots() {
       rate_per_kg: 720,
       seller_rating: 9.2,
       payment_terms_days: 7,
-      photos: 11,
+      images: ['/img/lots/copper-1.jpg', '/img/lots/copper-2.jpg'],
+      photos: 2,
       past_orders: 9,
       geo_verified: true,
       distance_km: 355,
@@ -181,6 +189,7 @@ function defaultLots() {
       rate_per_kg: 4.2,
       seller_rating: null,
       payment_terms_days: 45,
+      images: ['/img/lots/glass-1.jpg'],
       photos: 1,
       past_orders: 0,
       geo_verified: false,
@@ -200,7 +209,8 @@ function defaultLots() {
       rate_per_kg: 310,
       seller_rating: 8.6,
       payment_terms_days: 15,
-      photos: 6,
+      images: ['/img/lots/ewaste-1.jpg', '/img/lots/ewaste-2.jpg'],
+      photos: 2,
       past_orders: 3,
       geo_verified: true,
       distance_km: 34,
@@ -264,4 +274,50 @@ function clearDecisions(sellerId) {
   return before - d.lot_reviews.length;
 }
 
-module.exports = { ensureLots, allLots, decisionsFor, recordDecision, clearDecisions, defaultLots, LOTS_VERSION };
+/**
+ * Place the order for everything this buyer approved. Binding once written, so
+ * the caller must have accepted the terms - that check lives in the route, and
+ * the accepted text is stored on the order rather than referenced, because the
+ * wording can change and what they agreed to must not.
+ */
+function placeOrder(sellerId, { terms_text, session_id }) {
+  const d = db();
+  const decisions = decisionsFor(sellerId);
+  const lots = allLots().filter((l) => decisions[l.id] === 'approved');
+  if (!lots.length) return { error: 'nothing_approved' };
+
+  const order = {
+    id: 'ORD-' + Math.random().toString(36).slice(2, 8).toUpperCase(),
+    seller_id: sellerId,
+    lot_ids: lots.map((l) => l.id),
+    total_mt: Math.round(lots.reduce((s, l) => s + Number(l.quantity_mt), 0) * 1000) / 1000,
+    total_value: lots.reduce((s, l) => s + Number(l.quantity_mt) * 1000 * Number(l.rate_per_kg), 0),
+    terms_accepted: true,
+    terms_text: String(terms_text || '').slice(0, 500),
+    placed_at: now(),
+    session_id: session_id || null
+  };
+
+  d.orders = d.orders || [];
+  d.orders.unshift(order);
+  d.orders = d.orders.slice(0, 100);
+  save();
+  return { order, lots };
+}
+
+function orderFor(sellerId) {
+  const d = db();
+  return (d.orders || []).find((o) => o.seller_id === sellerId) || null;
+}
+
+module.exports = {
+  ensureLots,
+  allLots,
+  decisionsFor,
+  recordDecision,
+  clearDecisions,
+  placeOrder,
+  orderFor,
+  defaultLots,
+  LOTS_VERSION
+};

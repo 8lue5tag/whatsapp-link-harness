@@ -7,7 +7,7 @@ const { now } = require('../clock');
 const { INTENTS, OTP_FRESH_MS } = require('../intents');
 const { requireSession, requireFreshOtp, sessionState, SESSION_COOKIE } = require('../auth');
 const { revokeForResource, logEvent, resourceFor } = require('../tokens');
-const { allLots, decisionsFor, recordDecision, clearDecisions } = require('../lots');
+const { allLots, decisionsFor, recordDecision, clearDecisions, placeOrder, orderFor } = require('../lots');
 
 const router = express.Router();
 router.use(express.json());
@@ -156,7 +156,8 @@ router.get('/api/seller/lots', requireSession, requireCampaign, (req, res) => {
   res.json({
     lots: allLots(),
     profile: (req.seller && req.seller.profile) || null,
-    decisions: decisionsFor(req.session.seller_id)
+    decisions: decisionsFor(req.session.seller_id),
+    order: orderFor(req.session.seller_id)
   });
 });
 
@@ -189,9 +190,35 @@ router.post('/api/seller/lots/:id/decide', requireSession, requireCampaign, (req
   });
 });
 
+// The exact wording the buyer ticks. Stored with the order, and checked here so
+// a client that skips the checkbox can't place one anyway.
+const TERMS_TEXT =
+  'I understand this order is binding and cannot be cancelled once confirmed. ' +
+  'A debit note or shipment rejection may be raised only for genuine discrepancies.';
+
+/** Place the order for every approved lot. Terms must be accepted, server-side. */
+router.post('/api/seller/lots/order', requireSession, requireCampaign, (req, res) => {
+  if (!(req.body && req.body.terms_accepted === true)) {
+    return res.status(400).json({ error: 'terms_not_accepted' });
+  }
+
+  const out = placeOrder(req.session.seller_id, { terms_text: TERMS_TEXT, session_id: req.session.id });
+  if (out.error) return res.status(409).json({ error: out.error });
+
+  logEvent('lots.ordered', `${req.seller.name} ordered ${out.lots.length} lot(s), ${out.order.total_mt} MT`, {
+    seller_id: req.session.seller_id,
+    resource_id: out.order.id
+  });
+
+  res.json({ ok: true, order: out.order, lots: out.lots });
+});
+
 /** Harness affordance: wipe this buyer's decisions so the deck can be walked again. */
 router.post('/api/seller/lots/reset', requireSession, requireCampaign, (req, res) => {
   const cleared = clearDecisions(req.session.seller_id);
+  const d = db();
+  d.orders = (d.orders || []).filter((o) => o.seller_id !== req.session.seller_id);
+  save();
   res.json({ ok: true, cleared });
 });
 

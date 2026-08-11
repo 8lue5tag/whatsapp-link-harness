@@ -164,6 +164,24 @@
       width: 100%; border: 0; border-radius: 12px; background: var(--green-btn); color: #fff;
       font: 700 16.5px inherit; padding: 16px; cursor: pointer;
     }
+    .closebtn:disabled { background: #e4e7ea; color: #a3abb3; cursor: not-allowed; }
+
+    /* Terms gate. The whole block is the tap target, and the box is 22px so it
+       is hittable without zooming - but the button stays dead until it is on. */
+    .terms {
+      display: flex; gap: 11px; align-items: flex-start; text-align: left; cursor: pointer;
+      border: 1px solid var(--line); border-radius: 12px; padding: 13px; margin-bottom: 14px;
+      font-size: 13.5px; line-height: 1.45; color: var(--ink);
+    }
+    .terms.on { border-color: var(--green); background: #f4faf6; }
+    .terms .box {
+      width: 22px; height: 22px; border-radius: 6px; flex: none; margin-top: 1px;
+      border: 2px solid #cfd4d9; display: grid; place-content: center; color: #fff; background: #fff;
+    }
+    .terms.on .box { background: var(--green); border-color: var(--green); }
+    .terms .box svg { display: none; }
+    .terms.on .box svg { display: block; }
+    .terms input { position: absolute; opacity: 0; pointer-events: none; }
     .startover { display: block; margin: 14px auto 0; background: none; border: 0; color: var(--muted); font: 600 13.5px inherit; cursor: pointer; text-decoration: underline; }
     .msg { padding: 46px 24px; text-align: center; color: var(--muted); }
     .msg h3 { color: var(--ink); font-size: 21px; font-weight: 800; margin: 0 0 8px; }
@@ -202,26 +220,8 @@ function bigMoney(rupees) {
   return '₹' + inr(Math.round(rupees));
 }
 
-/**
- * Stand-in photos. The harness has no image store, so each lot gets a
- * deterministic blocky SVG derived from its id - stable across reloads, and
- * obviously a placeholder rather than a real yard picture.
- */
-function photoFor(lotId, n) {
-  let h = 0;
-  const key = lotId + ':' + n;
-  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
-  const rnd = () => ((h = (h * 1103515245 + 12345) >>> 0) / 4294967296);
-  const palette = ['#4b7a2a', '#69a336', '#8dc63f', '#5d6b3a', '#3f5a24', '#7a8b52', '#6f7b6a', '#2f4318'];
-  let cells = '';
-  for (let y = 0; y < 8; y++) {
-    for (let x = 0; x < 11; x++) {
-      cells += `<rect x="${x * 32}" y="${y * 32}" width="32" height="32" fill="${palette[Math.floor(rnd() * palette.length)]}"/>`;
-    }
-  }
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 352 256">${cells}</svg>`;
-  return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
-}
+/** Yard photos, served from this origin. A lot with none renders the empty state. */
+const photoFor = (lot, n) => (lot.images || [])[n] || '';
 
 async function post(path, body) {
   const res = await fetch(path, {
@@ -266,8 +266,8 @@ function card() {
   photo = Math.min(photo, Math.max(0, l.photos - 1));
 
   const thumbs = hasPhotos && l.photos > 1
-    ? `<div class="thumbs">${Array.from({ length: Math.min(l.photos, 6) }, (_, i) =>
-        `<img src="${photoFor(l.id, i)}" class="${i === photo ? 'on' : ''}" data-ph="${i}" alt="" />`).join('')}</div>`
+    ? `<div class="thumbs">${(l.images || []).map((src, i) =>
+        `<img src="${esc(src)}" class="${i === photo ? 'on' : ''}" data-ph="${i}" alt="" />`).join('')}</div>`
     : '';
 
   $('#shell').innerHTML = `
@@ -292,7 +292,7 @@ function card() {
       <div class="hero">
         <span class="tagchip ${l.tag ? 'on' : ''}">${l.tag ? I.check + esc(l.tag) : '✕ NOT TAGGED'}</span>
         ${hasPhotos
-          ? `<img class="frame" src="${photoFor(l.id, photo)}" alt="Lot photo" />
+          ? `<img class="frame" src="${esc(photoFor(l, photo))}" alt="Photo of ${esc(l.material)}" />
              <span class="counter">${I.eye} ${photo + 1}/${l.photos}</span>`
           : `<div class="empty">${I.img}<span>No images</span></div>`}
       </div>
@@ -404,50 +404,126 @@ async function decide(decision) {
   }
 }
 
+const TERMS_TEXT =
+  'I understand this order is binding and cannot be cancelled once confirmed. ' +
+  'A debit note or shipment rejection may be raised only for genuine discrepancies.';
+
+const lotLines = (lots) => lots.map((l) => `
+  <div class="kv">
+    <span class="k">${esc(l.seller)}<br><span style="color:var(--faint);font-weight:500">${esc(l.material)}</span></span>
+    <span class="v">${esc(l.quantity_mt)} MT<br>₹${inr(l.rate_per_kg)}/kg</span>
+  </div>`).join('');
+
+const totals = (lots) => ({
+  mt: lots.reduce((s, l) => s + Number(l.quantity_mt), 0),
+  value: lots.reduce((s, l) => s + Number(l.quantity_mt) * 1000 * Number(l.rate_per_kg), 0)
+});
+
+/** End of the deck: nothing is ordered yet. The terms gate the Place Order button. */
 function summary() {
   const approved = LOTS.filter((l) => DECISIONS[l.id] === 'approved');
-  const mt = approved.reduce((s, l) => s + Number(l.quantity_mt), 0);
-  const value = approved.reduce((s, l) => s + Number(l.quantity_mt) * 1000 * Number(l.rate_per_kg), 0);
+  const { mt, value } = totals(approved);
+  let agreed = false;
+
+  if (!approved.length) {
+    $('#shell').innerHTML = `
+      <div class="summary">
+        <h2>No lots selected</h2>
+        <p>You excluded every lot, so there is nothing to order.</p>
+        <button class="startover" id="startover">Review these lots again</button>
+      </div>`;
+    $('#startover').onclick = startOver;
+    return;
+  }
 
   $('#shell').innerHTML = `
     <div class="summary">
-      <div class="tick">${I.big}</div>
-      <h2>${approved.length} lot${approved.length === 1 ? '' : 's'} of ${mt.toFixed(mt < 10 ? 3 : 1)} MT ordered</h2>
-      <p>${approved.length
-        ? bigMoney(value) + ' in total · our team will confirm each pickup with you.'
-        : 'You excluded every lot. Nothing has been ordered.'}</p>
-      ${approved.length ? `<div class="sumlist">${approved.map((l) => `
-        <div class="kv">
-          <span class="k">${esc(l.seller)}<br><span style="color:var(--faint);font-weight:500">${esc(l.material)}</span></span>
-          <span class="v">${esc(l.quantity_mt)} MT<br>₹${inr(l.rate_per_kg)}/kg</span>
-        </div>`).join('')}</div>` : ''}
-      <button class="closebtn" id="close2">Close</button>
+      <h2>${approved.length} lot${approved.length === 1 ? '' : 's'} of ${mt.toFixed(mt < 10 ? 3 : 1)} MT selected</h2>
+      <p>${bigMoney(value)} in total. Confirm to place the order.</p>
+      <div class="sumlist">${lotLines(approved)}</div>
+      <label class="terms" id="terms">
+        <span class="box">${I.check}</span>
+        <input type="checkbox" id="agree" />
+        <span>${esc(TERMS_TEXT)}</span>
+      </label>
+      <button class="closebtn" id="place" disabled>Place Order</button>
+      <p class="err" id="err"></p>
       <button class="startover" id="startover">Review these lots again</button>
     </div>`;
 
-  $('#close2').onclick = closeWindow;
-  $('#startover').onclick = async () => {
-    await post('/api/seller/lots/reset');
-    load();
+  const box = $('#terms');
+  const cta = $('#place');
+  $('#agree').onchange = (e) => {
+    agreed = e.target.checked;
+    box.classList.toggle('on', agreed);
+    cta.disabled = !agreed;
+  };
+  $('#startover').onclick = startOver;
+
+  cta.onclick = async () => {
+    if (!agreed) return;
+    cta.disabled = true;
+    cta.textContent = 'Placing…';
+    try {
+      const out = await post('/api/seller/lots/order', { terms_accepted: true });
+      placed(out.order, out.lots);
+    } catch (e) {
+      if (String(e.body && e.body.error).startsWith('session_')) return signedOut(e.body.error);
+      $('#err').textContent = (e.body && e.body.error) || e.message;
+      cta.textContent = 'Place Order';
+      cta.disabled = false;
+    }
   };
 }
 
+/** After the order exists. Reached again on a reopen, so it must read from the order. */
+function placed(order, lots) {
+  $('#shell').innerHTML = `
+    <div class="summary">
+      <div class="tick">${I.big}</div>
+      <h2>${lots.length} lot${lots.length === 1 ? '' : 's'} of ${order.total_mt} MT ordered</h2>
+      <p>${bigMoney(order.total_value)} in total · our team will confirm each pickup with you.</p>
+      <div class="sumlist">${lotLines(lots)}</div>
+      <button class="closebtn" id="close2">Close</button>
+      <p class="foot" style="color:var(--faint);font-size:12.5px;margin:12px 0 0">Order ${esc(order.id)}</p>
+      <button class="startover" id="startover">Start a new review</button>
+    </div>`;
+
+  $('#close2').onclick = closeWindow;
+  $('#startover').onclick = startOver;
+}
+
+async function startOver() {
+  await post('/api/seller/lots/reset');
+  load();
+}
+
 /**
- * A tab the buyer opened from WhatsApp wasn't opened by script, so window.close()
- * is refused by every browser here. Try it anyway for the cases where it works
- * (the WhatsApp in-app webview being the one that matters), then fall back to a
- * plain "you can close this tab" state rather than a button that does nothing.
+ * Closing is not ours to do. window.close() only works on a window script
+ * opened, and WhatsApp's in-app browser refuses it too - which is why the button
+ * appeared dead. So: try it, then bounce back to WhatsApp with its own URL
+ * scheme, which is what "close" actually means to the buyer. If neither works
+ * (desktop browser), say so plainly instead of leaving a button that does
+ * nothing. Only the X in WhatsApp's own chrome truly dismisses the webview.
  */
 function closeWindow() {
   window.close();
+
   setTimeout(() => {
     if (document.hidden) return;
-    $('#shell').innerHTML = `
-      <div class="msg">
-        <h3>All done</h3>
-        <p>You can close this tab and go back to WhatsApp.</p>
-      </div>`;
-  }, 250);
+    const left = () => document.hidden;
+    // Hand off to the WhatsApp app. On both phones this returns the buyer to the
+    // chat, and the webview goes away behind it.
+    location.href = 'whatsapp://';
+    setTimeout(() => {
+      if (left()) return;
+      $('#shell').innerHTML = `
+        <div class="msg">
+          <h3>All done</h3>
+          <p>Your order is placed. Tap the <b>X</b> at the top of this window to go back to WhatsApp.</p>
+        </div>`;
+    }, 1200);
+  }, 200);
 }
 
 async function load() {
@@ -461,6 +537,8 @@ async function load() {
   LOTS = data.lots || [];
   DECISIONS = data.decisions || {};
   photo = 0;
+  // An order already exists: the deck is spent, show what was bought.
+  if (data.order) return placed(data.order, LOTS.filter((l) => data.order.lot_ids.includes(l.id)));
   if (!LOTS.length) {
     $('#shell').innerHTML = '<div class="msg"><h3>No lots right now</h3><p>We\'ll message you when new lots come in.</p></div>';
     return;
