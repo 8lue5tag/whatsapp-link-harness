@@ -252,12 +252,16 @@ router.post('/api/campaign/send', requireBearer, wrap(async (req, res) => {
     return res.status(403).json({ error: 'not_your_profile' });
   }
 
+  // Which of the two campaign links to send. Each has its own token, its own
+  // page and its own approved template, so this picks all three at once.
+  const intentKey = (req.body && req.body.intent) === 'lot_select' ? 'lot_select' : 'seller_portal';
+
   ensureCampaignTokens();
   const msg = await sendTemplate({
     seller,
-    intent: INTENTS.seller_portal,
+    intent: INTENTS[intentKey],
     resource: seller,
-    secret: campaignSecretFor(seller.id),
+    secret: campaignSecretFor(seller.id, intentKey),
     baseUrl: baseUrl(req),
     note: 'campaign link',
     send: { provider, mode, template, params }

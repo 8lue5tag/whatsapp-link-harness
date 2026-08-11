@@ -20,6 +20,19 @@ const DEFAULT_PARAMS = [
   ']'
 ].join('\n');
 
+// The lot-review template, approved separately with its own frozen base:
+//   Hi {{name}}, There are {{num}} lots totaling {{qty}} MT for {{mat}}
+//   pending your confirmation.        button -> .../lots/{{1}}
+// Sent by the lot picker's own button, so it never has to be typed in.
+const LOT_TEMPLATE = 'omp_test_buyer_check_lots';
+const LOT_PARAMS = [
+  { name: 'name', value: '{{first_name}}' },
+  { name: 'num', value: '{{lot_count}}' },
+  { name: 'qty', value: '{{lot_mt}}' },
+  { name: 'mat', value: '{{lot_material}}' },
+  { name: '1', value: '{{token}}', button: true }
+];
+
 const send = {
   provider: localStorage.getItem('send.provider') || 'simulate',
   mode: localStorage.getItem('send.mode') || 'text',
@@ -302,9 +315,11 @@ function renderCampaign() {
         <div class="row small">
           <button class="tiny" data-copy-url="${esc(c.lots_url || '')}">copy URL</button>
           <button class="tiny" data-copy-url="${esc(c.lots_token || '')}">copy token only</button>
+          <button class="tiny primary" data-campaign-send="${esc(c.seller_id)}" data-intent="lot_select">send this link</button>
           <a class="small" href="${esc(c.lots_url || '')}" target="_blank" rel="noopener">open</a>
           <span class="muted">opened ${c.lots_use_count || 0}×</span>
         </div>
+        <div class="small lots" data-cmsg="${esc(c.seller_id)}"></div>
         <div class="small" data-cmsg="${esc(c.seller_id)}"></div>
       </div>`
       )
@@ -452,7 +467,8 @@ document.addEventListener('click', async (ev) => {
 
   if (t.dataset.campaignSend) {
     const id = t.dataset.campaignSend;
-    const out = document.querySelector(`[data-cmsg="${id}"]`);
+    const lots = t.dataset.intent === 'lot_select';
+    const out = document.querySelector(`[data-cmsg="${id}"]${lots ? '.lots' : ':not(.lots)'}`);
     t.disabled = true;
     out.textContent = `sending via ${send.provider}…`;
     try {
@@ -460,10 +476,13 @@ document.addEventListener('click', async (ev) => {
         method: 'POST',
         body: JSON.stringify({
           seller_id: id,
+          intent: lots ? 'lot_select' : 'seller_portal',
           provider: send.provider,
           mode: send.mode,
-          template: send.template,
-          params: parsedParams() || []
+          // The lot template's names are fixed by its approval, so they come from
+          // here rather than from the shared params box.
+          template: lots ? LOT_TEMPLATE : send.template,
+          params: lots ? LOT_PARAMS : parsedParams() || []
         })
       });
       out.className = 'small ' + (r.ok ? 'ok' : 'err');

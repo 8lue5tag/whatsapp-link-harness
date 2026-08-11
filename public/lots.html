@@ -20,23 +20,26 @@
       --panel: #f7f9fa;
     }
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-    html, body { margin: 0; height: 100%; background: #eef1f4; color: var(--ink); }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #eef1f4; color: var(--ink); }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
-      font-size: 15px; line-height: 1.4;
+      font-size: 15px; line-height: 1.35;
     }
 
-    /* The whole review is one fixed-height column: header and action bar pinned,
-       only the lot body scrolls. A card that scrolled the buttons off screen
-       would cost a tap on every single lot. */
+    /* One viewport, never the page. The shell is exactly as tall as the screen,
+       header and action bar are pinned, and only the lot detail scrolls inside.
+       Approve / Exclude are therefore always on screen - on a long lot the page
+       would otherwise scroll them away and cost a swipe on every single card.
+       dvh, so the mobile browser's collapsing address bar doesn't clip the bar. */
     .shell {
       max-width: 420px; margin: 0 auto; background: var(--bg);
-      min-height: 100%; display: flex; flex-direction: column;
+      height: 100vh; height: 100dvh; overflow: hidden;
+      display: flex; flex-direction: column;
       box-shadow: 0 0 0 1px rgba(0,0,0,0.04);
     }
 
     /* ---------------- header ---------------- */
-    .head { padding: 14px 16px 0; border-bottom: 1px solid var(--hair); background: var(--bg); }
+    .head { padding: 10px 14px 0; border-bottom: 1px solid var(--hair); background: var(--bg); }
     .head .top { display: flex; align-items: flex-start; gap: 12px; }
     .eyebrow {
       font-size: 11px; font-weight: 800; letter-spacing: 0.09em;
@@ -44,7 +47,7 @@
     }
     .head .title { flex: 1; min-width: 0; }
     .lotof { font-size: 13.5px; font-weight: 700; margin-left: 10px; color: var(--ink); }
-    .tally { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin: 7px 0 11px; font-size: 12.5px; }
+    .tally { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin: 5px 0 8px; font-size: 12.5px; }
     .tally .g, .tally .r { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; }
     .tally .g { color: var(--green); }
     .tally .r { color: var(--red); }
@@ -56,16 +59,16 @@
       border: 1px solid var(--line); color: var(--muted);
       display: grid; place-content: center; cursor: pointer;
     }
-    .bar { height: 4px; background: var(--hair); border-radius: 4px; overflow: hidden; margin-bottom: 12px; }
+    .bar { height: 4px; background: var(--hair); border-radius: 4px; overflow: hidden; margin-bottom: 9px; }
     .bar i { display: block; height: 100%; background: var(--green); border-radius: 4px; transition: width .22s ease; }
 
     /* ---------------- scrolling body ---------------- */
     .body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 
     .hero { position: relative; background: var(--panel); }
-    .hero .frame { aspect-ratio: 16 / 11; width: 100%; display: block; object-fit: cover; }
+    .hero .frame { aspect-ratio: 16 / 7; width: 100%; display: block; object-fit: cover; }
     .hero .empty {
-      aspect-ratio: 16 / 7; display: grid; place-content: center; gap: 7px;
+      aspect-ratio: 16 / 4.5; display: grid; place-content: center; gap: 7px;
       color: var(--faint); text-align: center; font-size: 13px;
     }
     .tagchip {
@@ -80,14 +83,14 @@
       background: rgba(22,32,43,0.72); color: #fff; font-size: 11.5px; font-weight: 700;
       border-radius: 7px; padding: 4px 8px; display: inline-flex; align-items: center; gap: 5px;
     }
-    .thumbs { display: flex; gap: 8px; padding: 10px 14px 2px; overflow-x: auto; }
+    .thumbs { display: flex; gap: 7px; padding: 8px 14px 0; overflow-x: auto; }
     .thumbs img {
-      width: 52px; height: 40px; object-fit: cover; border-radius: 7px;
+      width: 46px; height: 34px; object-fit: cover; border-radius: 7px;
       border: 2px solid transparent; cursor: pointer; flex: none;
     }
     .thumbs img.on { border-color: var(--green); }
 
-    .main { padding: 14px 16px 4px; }
+    .main { padding: 11px 14px 2px; }
     .code { font-size: 11.5px; font-weight: 800; letter-spacing: 0.08em; color: var(--faint); text-transform: uppercase; }
     .headline { display: flex; align-items: flex-start; gap: 10px; margin-top: 3px; }
     .seller {
@@ -107,46 +110,47 @@
     .qty { display: flex; align-items: center; gap: 16px; color: var(--muted); font-size: 13.5px; margin-top: 5px; }
     .qty span { display: inline-flex; align-items: center; gap: 5px; }
 
-    .facts { padding: 14px 16px 0; display: grid; gap: 10px; }
-    .fact { border: 1px solid var(--line); border-radius: 11px; padding: 10px 13px; }
+    .facts { padding: 11px 14px 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .fact { border: 1px solid var(--line); border-radius: 10px; padding: 8px 9px; min-width: 0; }
     .fact .k { font-size: 10.5px; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase; color: var(--faint); }
-    .fact .v { font-size: 15px; font-weight: 700; margin-top: 3px; display: flex; align-items: center; gap: 6px; }
+    .fact .v { font-size: 13.5px; font-weight: 700; margin-top: 3px; display: flex; align-items: center; gap: 5px; white-space: nowrap; }
     .fact .v.na { color: var(--faint); }
 
     .note {
-      margin: 14px 16px 0; border: 1px solid #cfe1f7; background: #f2f7fe;
-      color: #1c5ba8; border-radius: 11px; padding: 12px 13px; font-size: 13.5px;
+      margin: 8px 14px 0; border: 1px solid #cfe1f7; background: #f2f7fe;
+      color: #1c5ba8; border-radius: 10px; padding: 9px 11px; font-size: 13px;
     }
 
-    .sect { margin: 18px 16px 0; }
+    .sect { margin: 13px 14px 0; }
     .sect h4 {
       font-size: 11px; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase;
       color: var(--faint); margin: 0 0 4px;
     }
-    .kv { display: flex; justify-content: space-between; gap: 14px; padding: 11px 0; border-bottom: 1px solid var(--hair); font-size: 14px; }
+    .kv { display: flex; justify-content: space-between; gap: 14px; padding: 8px 0; border-bottom: 1px solid var(--hair); font-size: 14px; }
     .kv:last-child { border-bottom: 0; }
     .kv .k { color: var(--muted); }
     .kv .v { font-weight: 700; text-align: right; }
     .kv .v.warn { color: var(--amber); }
     .kv .v.ok { color: var(--green); }
 
-    .tail { height: 22px; }
+    .tail { height: 14px; }
 
     /* ---------------- action bar ---------------- */
     .actions {
-      display: flex; gap: 11px; padding: 12px 14px calc(14px + env(safe-area-inset-bottom));
+      display: flex; gap: 10px; padding: 10px 14px calc(11px + env(safe-area-inset-bottom));
       border-top: 1px solid var(--hair); background: var(--bg);
     }
     .actions button {
       flex: 1; border-radius: 11px; font: 700 15.5px inherit; cursor: pointer;
-      padding: 14px 10px; display: flex; align-items: center; justify-content: center; gap: 7px;
+      padding: 13px 10px; display: flex; align-items: center; justify-content: center; gap: 7px;
     }
     .reject { border: 1px solid #f0c8c3; background: #fff; color: var(--red); }
     .approve { border: 0; background: var(--green-btn); color: #fff; }
     .actions button:disabled { opacity: .55; cursor: progress; }
 
     /* ---------------- summary ---------------- */
-    .summary { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 34px 22px; text-align: center; }
+    /* The shell no longer scrolls, so a long approved list has to scroll here. */
+    .summary { flex: 1; overflow-y: auto; display: flex; flex-direction: column; justify-content: center; padding: 30px 20px; text-align: center; }
     .summary .tick {
       width: 66px; height: 66px; border-radius: 50%; background: #e8f3ec; color: var(--green);
       display: grid; place-content: center; margin: 0 auto 18px;
@@ -315,17 +319,20 @@ function card() {
       </div>
 
       <div class="facts">
+        <!-- Three across, so the labels are clipped to fit: the full wording
+             ("Seller rating", "Payment terms (delivery)") wraps to two lines and
+             costs a row of height on every card. -->
         <div class="fact">
-          <div class="k">Seller rating</div>
-          <div class="v ${l.seller_rating == null ? 'na' : ''}">${I.star}${l.seller_rating == null ? 'N/A' : esc(l.seller_rating.toFixed(1)) + ' / 10.0'}</div>
+          <div class="k">Rating</div>
+          <div class="v ${l.seller_rating == null ? 'na' : ''}">${I.star}${l.seller_rating == null ? 'N/A' : esc(l.seller_rating.toFixed(1)) + '/10'}</div>
         </div>
         <div class="fact">
-          <div class="k">Payment terms (delivery)</div>
+          <div class="k">Payment</div>
           <div class="v">${I.check}${esc(l.payment_terms_days)}d</div>
         </div>
         <div class="fact">
           <div class="k">Photos</div>
-          <div class="v ${l.photos ? '' : 'na'}">${I.files}${esc(l.photos)} file${l.photos === 1 ? '' : 's'}</div>
+          <div class="v ${l.photos ? '' : 'na'}">${I.files}${esc(l.photos)}</div>
         </div>
       </div>
 
@@ -386,8 +393,8 @@ async function decide(decision) {
     const next = nextUndecided(idx + 1);
     if (next === -1) return summary();
     idx = next;
-    // Each card starts at the top - a half-scrolled next lot reads as the same lot.
-    window.scrollTo(0, 0);
+    // card() replaces .body wholesale, so the next lot always starts at the top -
+    // a half-scrolled next lot reads as the same lot.
     card();
   } catch (e) {
     busy = false;

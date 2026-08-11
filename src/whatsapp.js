@@ -7,15 +7,26 @@ const { logEvent } = require('./tokens');
 const providers = require('./providers');
 
 // Meta constraint: in an approved template the variable can only sit at the END
-// of the URL. So the route is /s/{{1}} and nothing follows it - no path segments
-// after the token, no fragment.
+// of the URL. So the route ends in {{1}} and nothing follows it - no path
+// segments after the token, no fragment.
+//
+// Each template freezes its own base at approval, so the base is per intent and
+// must match what Meta approved, character for character:
+//   omp_test_token_buyer1     -> .../s/{{1}}
+//   omp_test_buyer_check_lots -> .../lots/{{1}}
 const TEMPLATE_URL = '/s/{{1}}';
+const TEMPLATE_URLS = { lot_select: '/lots/{{1}}' };
 
 const TEMPLATES = {
   seller_portal: {
     name: 'seller_portal_v1',
     button: 'Open my portal',
     body: (r) => `Hi ${r.name}, open your Rapidue portal to manage your material.`
+  },
+  lot_select: {
+    name: 'omp_test_buyer_check_lots',
+    button: 'Check Lots',
+    body: (r) => `Hi ${r.name}, there are lots pending your confirmation.`
   },
   listing_draft: {
     name: 'listing_draft_resume_v1',
@@ -74,7 +85,7 @@ function resolveParams(list, vars) {
 async function sendTemplate({ seller, intent, resource, secret, baseUrl, note, send }) {
   const d = db();
   const tpl = TEMPLATES[intent.key];
-  const url = `${baseUrl}${TEMPLATE_URL.replace('{{1}}', secret)}`;
+  const url = `${baseUrl}${(TEMPLATE_URLS[intent.key] || TEMPLATE_URL).replace('{{1}}', secret)}`;
   const opts = send || {};
   const providerKey = opts.provider || process.env.SEND_PROVIDER || 'simulate';
   const mode = opts.mode || process.env.SEND_MODE || 'text';
@@ -113,7 +124,22 @@ async function sendTemplate({ seller, intent, resource, secret, baseUrl, note, s
           : firstBid
             ? firstBid.amount
             : ''
-    )
+    ),
+    // For omp_test_buyer_check_lots: "{{num}} lots totaling {{qty}} MT for
+    // {{mat}}". Counts only what this buyer has not decided on yet, so the
+    // message and the deck they open agree with each other.
+    ...(() => {
+      const { allLots, decisionsFor } = require('./lots');
+      const pending = allLots().filter((l) => !decisionsFor(seller.id)[l.id]);
+      const byMaterial = {};
+      for (const l of pending) byMaterial[l.material] = (byMaterial[l.material] || 0) + 1;
+      const top = Object.entries(byMaterial).sort((a, b) => b[1] - a[1])[0];
+      return {
+        lot_count: String(pending.length),
+        lot_mt: String(Math.round(pending.reduce((s, l) => s + Number(l.quantity_mt), 0) * 10) / 10),
+        lot_material: top ? top[0] : 'scrap'
+      };
+    })()
   });
 
   const msg = {
