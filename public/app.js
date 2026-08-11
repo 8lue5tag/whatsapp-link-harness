@@ -288,13 +288,22 @@ function renderCampaign() {
           <div><strong>${esc(c.name)}</strong> <span class="muted small">+${esc(c.wa_id || 'no number')}</span></div>
           <span class="pill ${c.status === 'active' ? 'active' : esc(c.status)}">${esc(c.status)}</span>
         </div>
-        <div class="mono small" style="word-break:break-all;margin:6px 0;color:var(--blue)">${esc(c.url)}</div>
+        <div class="muted small" style="margin-top:8px">price screen</div>
+        <div class="mono small" style="word-break:break-all;margin:4px 0;color:var(--blue)">${esc(c.url)}</div>
         <div class="row small">
           <button class="tiny" data-copy-url="${esc(c.url)}">copy URL</button>
           <button class="tiny" data-copy-url="${esc(c.token)}">copy token only</button>
           <button class="tiny primary" data-campaign-send="${esc(c.seller_id)}">send this link</button>
           <a class="small" href="${esc(c.url)}" target="_blank" rel="noopener">open</a>
           <span class="muted">opened ${c.use_count}×</span>
+        </div>
+        <div class="muted small" style="margin-top:10px">lot picker</div>
+        <div class="mono small" style="word-break:break-all;margin:4px 0;color:var(--blue)">${esc(c.lots_url || '')}</div>
+        <div class="row small">
+          <button class="tiny" data-copy-url="${esc(c.lots_url || '')}">copy URL</button>
+          <button class="tiny" data-copy-url="${esc(c.lots_token || '')}">copy token only</button>
+          <a class="small" href="${esc(c.lots_url || '')}" target="_blank" rel="noopener">open</a>
+          <span class="muted">opened ${c.lots_use_count || 0}×</span>
         </div>
         <div class="small" data-cmsg="${esc(c.seller_id)}"></div>
       </div>`

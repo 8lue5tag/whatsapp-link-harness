@@ -23,6 +23,21 @@ const INTENTS = {
     sessionIdleMs: 30 * MIN,
     rationale: 'Campaign link. Never expires; sees only this seller’s own data.'
   },
+  // Second campaign token, same shape as seller_portal but it lands on the lot
+  // picker instead of the price screen. Separate intent (not a query string)
+  // because the approved Meta template only allows a variable at the very end
+  // of the URL - so the destination has to be carried by the token itself.
+  lot_select: {
+    key: 'lot_select',
+    label: 'Pick the lots you want',
+    resource: 'seller',
+    ceilingKind: 'none',
+    ceilingMs: null,
+    renewable: true,
+    stepUp: false,
+    sessionIdleMs: 30 * MIN,
+    rationale: 'Campaign link. Never expires; opens the live lot list.'
+  },
   listing_draft: {
     key: 'listing_draft',
     label: 'Resume a listing draft',

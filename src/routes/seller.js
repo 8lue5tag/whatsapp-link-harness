@@ -7,6 +7,7 @@ const { now } = require('../clock');
 const { INTENTS, OTP_FRESH_MS } = require('../intents');
 const { requireSession, requireFreshOtp, sessionState, SESSION_COOKIE } = require('../auth');
 const { revokeForResource, logEvent, resourceFor } = require('../tokens');
+const { allLots, decisionsFor, recordDecision, clearDecisions } = require('../lots');
 
 const router = express.Router();
 router.use(express.json());
@@ -61,7 +62,10 @@ router.get('/api/session', (req, res) => {
   const d = db();
   const intent = INTENTS[session.intent];
   const seller = d.users.find((u) => u.id === session.seller_id);
-  const portal = session.intent === 'seller_portal';
+  // Both campaign intents are seller-scoped rather than resource-scoped. They
+  // must never fall through to resourceFor(), which for a seller resource would
+  // hand back the raw user row - password and all.
+  const portal = session.intent === 'seller_portal' || session.intent === 'lot_select';
 
   res.json({
     state,
@@ -137,6 +141,58 @@ router.post('/api/seller/rate', requireSession, (req, res) => {
   });
 
   res.json({ ok: true, requirement });
+});
+
+/* ------------------------------ lot board ------------------------------ */
+
+/** Either campaign session may read the board; a task token may not. */
+function requireCampaign(req, res, next) {
+  if (req.session.intent === 'lot_select' || req.session.intent === 'seller_portal') return next();
+  return res.status(403).json({ error: 'wrong_intent', have: req.session.intent, need: 'lot_select' });
+}
+
+/** The whole deck plus whatever this buyer already decided, so a reopen resumes. */
+router.get('/api/seller/lots', requireSession, requireCampaign, (req, res) => {
+  res.json({
+    lots: allLots(),
+    profile: (req.seller && req.seller.profile) || null,
+    decisions: decisionsFor(req.session.seller_id)
+  });
+});
+
+/**
+ * One card, one decision. The buyer id comes from the session, never the body,
+ * and the lot id must exist on the board - a hand-typed one is rejected.
+ */
+router.post('/api/seller/lots/:id/decide', requireSession, requireCampaign, (req, res) => {
+  const decision = String((req.body && req.body.decision) || '');
+  if (!['approved', 'excluded'].includes(decision)) return res.status(400).json({ error: 'bad_decision' });
+
+  const lot = allLots().find((l) => l.id === req.params.id);
+  if (!lot) return res.status(404).json({ error: 'unknown_lot' });
+
+  const decisions = recordDecision(req.session.seller_id, lot.id, decision, req.session.id);
+  const approved = allLots().filter((l) => decisions[l.id] === 'approved');
+
+  logEvent('lots.decided', `${req.seller.name} ${decision} ${lot.id}`, {
+    seller_id: req.session.seller_id,
+    resource_id: lot.id
+  });
+
+  res.json({
+    ok: true,
+    decisions,
+    approved_count: approved.length,
+    excluded_count: Object.values(decisions).filter((v) => v === 'excluded').length,
+    remaining: allLots().length - Object.keys(decisions).length,
+    approved_mt: approved.reduce((s, l) => s + Number(l.quantity_mt), 0)
+  });
+});
+
+/** Harness affordance: wipe this buyer's decisions so the deck can be walked again. */
+router.post('/api/seller/lots/reset', requireSession, requireCampaign, (req, res) => {
+  const cleared = clearDecisions(req.session.seller_id);
+  res.json({ ok: true, cleared });
 });
 
 /* ---------------------------- listing_draft ---------------------------- */

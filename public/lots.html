@@ -1,0 +1,470 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#ffffff" />
+  <title>Lot review</title>
+  <style>
+    :root {
+      --ink: #16202b;
+      --muted: #7c8794;
+      --faint: #9aa4af;
+      --line: #e7eaee;
+      --hair: #eef1f4;
+      --green: #14663a;
+      --green-btn: #1a6b3c;
+      --red: #d94a3d;
+      --amber: #b4530f;
+      --bg: #ffffff;
+      --panel: #f7f9fa;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; height: 100%; background: #eef1f4; color: var(--ink); }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+      font-size: 15px; line-height: 1.4;
+    }
+
+    /* The whole review is one fixed-height column: header and action bar pinned,
+       only the lot body scrolls. A card that scrolled the buttons off screen
+       would cost a tap on every single lot. */
+    .shell {
+      max-width: 420px; margin: 0 auto; background: var(--bg);
+      min-height: 100%; display: flex; flex-direction: column;
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.04);
+    }
+
+    /* ---------------- header ---------------- */
+    .head { padding: 14px 16px 0; border-bottom: 1px solid var(--hair); background: var(--bg); }
+    .head .top { display: flex; align-items: flex-start; gap: 12px; }
+    .eyebrow {
+      font-size: 11px; font-weight: 800; letter-spacing: 0.09em;
+      text-transform: uppercase; color: var(--faint);
+    }
+    .head .title { flex: 1; min-width: 0; }
+    .lotof { font-size: 13.5px; font-weight: 700; margin-left: 10px; color: var(--ink); }
+    .tally { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin: 7px 0 11px; font-size: 12.5px; }
+    .tally .g, .tally .r { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; }
+    .tally .g { color: var(--green); }
+    .tally .r { color: var(--red); }
+    .tally .sep { color: #cdd4da; }
+    .tally .rem { color: var(--muted); font-weight: 600; }
+    .pipdot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .x {
+      width: 34px; height: 34px; flex: none; border-radius: 10px; background: none;
+      border: 1px solid var(--line); color: var(--muted);
+      display: grid; place-content: center; cursor: pointer;
+    }
+    .bar { height: 4px; background: var(--hair); border-radius: 4px; overflow: hidden; margin-bottom: 12px; }
+    .bar i { display: block; height: 100%; background: var(--green); border-radius: 4px; transition: width .22s ease; }
+
+    /* ---------------- scrolling body ---------------- */
+    .body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+    .hero { position: relative; background: var(--panel); }
+    .hero .frame { aspect-ratio: 16 / 11; width: 100%; display: block; object-fit: cover; }
+    .hero .empty {
+      aspect-ratio: 16 / 7; display: grid; place-content: center; gap: 7px;
+      color: var(--faint); text-align: center; font-size: 13px;
+    }
+    .tagchip {
+      position: absolute; top: 12px; left: 12px; z-index: 2;
+      background: #4a5560; color: #fff; font-size: 11px; font-weight: 700;
+      letter-spacing: 0.04em; border-radius: 7px; padding: 5px 9px;
+      display: inline-flex; align-items: center; gap: 5px;
+    }
+    .tagchip.on { background: var(--green); }
+    .counter {
+      position: absolute; right: 12px; bottom: 12px;
+      background: rgba(22,32,43,0.72); color: #fff; font-size: 11.5px; font-weight: 700;
+      border-radius: 7px; padding: 4px 8px; display: inline-flex; align-items: center; gap: 5px;
+    }
+    .thumbs { display: flex; gap: 8px; padding: 10px 14px 2px; overflow-x: auto; }
+    .thumbs img {
+      width: 52px; height: 40px; object-fit: cover; border-radius: 7px;
+      border: 2px solid transparent; cursor: pointer; flex: none;
+    }
+    .thumbs img.on { border-color: var(--green); }
+
+    .main { padding: 14px 16px 4px; }
+    .code { font-size: 11.5px; font-weight: 800; letter-spacing: 0.08em; color: var(--faint); text-transform: uppercase; }
+    .headline { display: flex; align-items: flex-start; gap: 10px; margin-top: 3px; }
+    .seller {
+      font-size: 17px; font-weight: 800; letter-spacing: -0.01em;
+      text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 2px;
+    }
+    .newbadge {
+      display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+      background: #e8f1fd; color: #1668c4; border-radius: 999px;
+      font-size: 12px; font-weight: 700; padding: 4px 10px; margin-left: 8px;
+    }
+    .money { margin-left: auto; text-align: right; flex: none; }
+    .money b { display: block; font-size: 19px; font-weight: 800; letter-spacing: -0.02em; }
+    .money b i { font-style: normal; font-size: 12.5px; font-weight: 700; color: var(--faint); }
+    .money span { display: block; color: var(--faint); font-size: 12.5px; margin-top: 2px; }
+    .idline { color: var(--faint); font-size: 12.5px; margin-top: 8px; }
+    .qty { display: flex; align-items: center; gap: 16px; color: var(--muted); font-size: 13.5px; margin-top: 5px; }
+    .qty span { display: inline-flex; align-items: center; gap: 5px; }
+
+    .facts { padding: 14px 16px 0; display: grid; gap: 10px; }
+    .fact { border: 1px solid var(--line); border-radius: 11px; padding: 10px 13px; }
+    .fact .k { font-size: 10.5px; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase; color: var(--faint); }
+    .fact .v { font-size: 15px; font-weight: 700; margin-top: 3px; display: flex; align-items: center; gap: 6px; }
+    .fact .v.na { color: var(--faint); }
+
+    .note {
+      margin: 14px 16px 0; border: 1px solid #cfe1f7; background: #f2f7fe;
+      color: #1c5ba8; border-radius: 11px; padding: 12px 13px; font-size: 13.5px;
+    }
+
+    .sect { margin: 18px 16px 0; }
+    .sect h4 {
+      font-size: 11px; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase;
+      color: var(--faint); margin: 0 0 4px;
+    }
+    .kv { display: flex; justify-content: space-between; gap: 14px; padding: 11px 0; border-bottom: 1px solid var(--hair); font-size: 14px; }
+    .kv:last-child { border-bottom: 0; }
+    .kv .k { color: var(--muted); }
+    .kv .v { font-weight: 700; text-align: right; }
+    .kv .v.warn { color: var(--amber); }
+    .kv .v.ok { color: var(--green); }
+
+    .tail { height: 22px; }
+
+    /* ---------------- action bar ---------------- */
+    .actions {
+      display: flex; gap: 11px; padding: 12px 14px calc(14px + env(safe-area-inset-bottom));
+      border-top: 1px solid var(--hair); background: var(--bg);
+    }
+    .actions button {
+      flex: 1; border-radius: 11px; font: 700 15.5px inherit; cursor: pointer;
+      padding: 14px 10px; display: flex; align-items: center; justify-content: center; gap: 7px;
+    }
+    .reject { border: 1px solid #f0c8c3; background: #fff; color: var(--red); }
+    .approve { border: 0; background: var(--green-btn); color: #fff; }
+    .actions button:disabled { opacity: .55; cursor: progress; }
+
+    /* ---------------- summary ---------------- */
+    .summary { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 34px 22px; text-align: center; }
+    .summary .tick {
+      width: 66px; height: 66px; border-radius: 50%; background: #e8f3ec; color: var(--green);
+      display: grid; place-content: center; margin: 0 auto 18px;
+    }
+    .summary h2 { font-size: 25px; font-weight: 800; letter-spacing: -0.02em; margin: 0 0 8px; }
+    .summary p { color: var(--muted); font-size: 15px; margin: 0 0 20px; }
+    .sumlist { text-align: left; border: 1px solid var(--line); border-radius: 13px; padding: 4px 14px; margin-bottom: 18px; }
+    .sumlist .kv .k { max-width: 62%; color: var(--ink); font-weight: 600; }
+    .sumlist .kv .v { color: var(--muted); font-weight: 600; }
+    .closebtn {
+      width: 100%; border: 0; border-radius: 12px; background: var(--green-btn); color: #fff;
+      font: 700 16.5px inherit; padding: 16px; cursor: pointer;
+    }
+    .startover { display: block; margin: 14px auto 0; background: none; border: 0; color: var(--muted); font: 600 13.5px inherit; cursor: pointer; text-decoration: underline; }
+    .msg { padding: 46px 24px; text-align: center; color: var(--muted); }
+    .msg h3 { color: var(--ink); font-size: 21px; font-weight: 800; margin: 0 0 8px; }
+    .err { color: var(--red); font-size: 13.5px; text-align: center; padding: 0 16px 8px; min-height: 18px; }
+  </style>
+</head>
+<body>
+<div class="shell" id="shell"><div class="msg">Loading your lots…</div></div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+let LOTS = [], DECISIONS = {}, idx = 0, photo = 0, busy = false;
+
+const I = {
+  x: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
+  eye: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>',
+  pin: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>',
+  circle: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/></svg>',
+  star: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="m12 3 2.7 5.6 6.3.9-4.5 4.4 1 6.1-5.5-2.9-5.5 2.9 1-6.1L3 9.5l6.3-.9L12 3Z"/></svg>',
+  check: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m20 6-11 11-5-5"/></svg>',
+  cross: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
+  img: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m4 18 5-5 4 4 3-3 4 4"/></svg>',
+  files: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m4 17 5-5 4 4 3-3 4 4"/></svg>',
+  info: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>',
+  big: '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m20 6-11 11-5-5"/></svg>'
+};
+
+const inr = (n) => Number(n).toLocaleString('en-IN');
+
+/** ₹15.84 L / ₹1.2 Cr - the way a trader reads a total, not 1584000. */
+function bigMoney(rupees) {
+  if (rupees >= 1e7) return '₹' + (rupees / 1e7).toFixed(2).replace(/\.00$/, '') + ' Cr';
+  if (rupees >= 1e5) return '₹' + (rupees / 1e5).toFixed(2).replace(/\.00$/, '') + ' L';
+  return '₹' + inr(Math.round(rupees));
+}
+
+/**
+ * Stand-in photos. The harness has no image store, so each lot gets a
+ * deterministic blocky SVG derived from its id - stable across reloads, and
+ * obviously a placeholder rather than a real yard picture.
+ */
+function photoFor(lotId, n) {
+  let h = 0;
+  const key = lotId + ':' + n;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+  const rnd = () => ((h = (h * 1103515245 + 12345) >>> 0) / 4294967296);
+  const palette = ['#4b7a2a', '#69a336', '#8dc63f', '#5d6b3a', '#3f5a24', '#7a8b52', '#6f7b6a', '#2f4318'];
+  let cells = '';
+  for (let y = 0; y < 8; y++) {
+    for (let x = 0; x < 11; x++) {
+      cells += `<rect x="${x * 32}" y="${y * 32}" width="32" height="32" fill="${palette[Math.floor(rnd() * palette.length)]}"/>`;
+    }
+  }
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 352 256">${cells}</svg>`;
+  return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+}
+
+async function post(path, body) {
+  const res = await fetch(path, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body || {})
+  });
+  const out = await res.json().catch(() => ({}));
+  if (!res.ok) throw Object.assign(new Error(out.error || res.statusText), { body: out });
+  return out;
+}
+
+function counts() {
+  const vals = LOTS.map((l) => DECISIONS[l.id]);
+  return {
+    approved: vals.filter((v) => v === 'approved').length,
+    excluded: vals.filter((v) => v === 'excluded').length,
+    done: vals.filter(Boolean).length
+  };
+}
+
+/** The next lot with no decision yet, starting at (and including) `from`. */
+function nextUndecided(from) {
+  for (let i = from; i < LOTS.length; i++) if (!DECISIONS[LOTS[i].id]) return i;
+  for (let i = 0; i < LOTS.length; i++) if (!DECISIONS[LOTS[i].id]) return i;
+  return -1;
+}
+
+function signedOut(state) {
+  $('#shell').innerHTML = `
+    <div class="msg">
+      <h3>You've been signed out</h3>
+      <p>${state === 'absolute_expired' ? 'This session reached its maximum length.' : 'You were away for a while.'}</p>
+      <p>Your link doesn't expire — tap the button in your WhatsApp message again.</p>
+    </div>`;
+}
+
+function card() {
+  const l = LOTS[idx];
+  const c = counts();
+  const total = Number(l.quantity_mt) * 1000 * Number(l.rate_per_kg);
+  const pct = Math.round((c.done / LOTS.length) * 100);
+  const hasPhotos = l.photos > 0;
+  photo = Math.min(photo, Math.max(0, l.photos - 1));
+
+  const thumbs = hasPhotos && l.photos > 1
+    ? `<div class="thumbs">${Array.from({ length: Math.min(l.photos, 6) }, (_, i) =>
+        `<img src="${photoFor(l.id, i)}" class="${i === photo ? 'on' : ''}" data-ph="${i}" alt="" />`).join('')}</div>`
+    : '';
+
+  $('#shell').innerHTML = `
+    <div class="head">
+      <div class="top">
+        <div class="title">
+          <span class="eyebrow">Lot review</span>
+          <span class="lotof">Lot ${idx + 1} of ${LOTS.length}</span>
+        </div>
+        <button class="x" id="close" aria-label="Close">${I.x}</button>
+      </div>
+      <div class="tally">
+        <span class="g"><i class="pipdot"></i>${c.approved} Approved</span>
+        <span class="r"><i class="pipdot"></i>${c.excluded} Excluded</span>
+        <span class="sep">·</span>
+        <span class="rem">${LOTS.length - c.done} Remaining</span>
+      </div>
+      <div class="bar"><i style="width:${pct}%"></i></div>
+    </div>
+
+    <div class="body" id="body">
+      <div class="hero">
+        <span class="tagchip ${l.tag ? 'on' : ''}">${l.tag ? I.check + esc(l.tag) : '✕ NOT TAGGED'}</span>
+        ${hasPhotos
+          ? `<img class="frame" src="${photoFor(l.id, photo)}" alt="Lot photo" />
+             <span class="counter">${I.eye} ${photo + 1}/${l.photos}</span>`
+          : `<div class="empty">${I.img}<span>No images</span></div>`}
+      </div>
+      ${thumbs}
+
+      <div class="main">
+        <div class="code">${esc(l.material_code)}</div>
+        <div class="headline">
+          <div style="min-width:0">
+            <span class="seller">${esc(l.seller)}</span>
+            ${l.new_seller ? `<span class="newbadge">New Seller ${I.info}</span>` : ''}
+            <div style="font-size:13.5px;color:var(--muted);margin-top:5px">${esc(l.material)}</div>
+          </div>
+          <div class="money">
+            <b>₹${inr(l.rate_per_kg)}<i>/kg</i></b>
+            <span>${bigMoney(total)} total</span>
+          </div>
+        </div>
+        <div class="idline">#${esc(l.id)}</div>
+        <div class="qty">
+          <span>${I.circle} ${esc(l.quantity_mt)} MT</span>
+          <span>${I.pin} ${esc(l.location)}</span>
+        </div>
+      </div>
+
+      <div class="facts">
+        <div class="fact">
+          <div class="k">Seller rating</div>
+          <div class="v ${l.seller_rating == null ? 'na' : ''}">${I.star}${l.seller_rating == null ? 'N/A' : esc(l.seller_rating.toFixed(1)) + ' / 10.0'}</div>
+        </div>
+        <div class="fact">
+          <div class="k">Payment terms (delivery)</div>
+          <div class="v">${I.check}${esc(l.payment_terms_days)}d</div>
+        </div>
+        <div class="fact">
+          <div class="k">Photos</div>
+          <div class="v ${l.photos ? '' : 'na'}">${I.files}${esc(l.photos)} file${l.photos === 1 ? '' : 's'}</div>
+        </div>
+      </div>
+
+      <div class="sect">
+        <h4>Your history with this seller</h4>
+        <div class="note">${l.past_orders
+          ? `${l.past_orders} past order${l.past_orders > 1 ? 's' : ''} with this seller — all settled.`
+          : 'No past orders with this seller yet — this will be your first.'}</div>
+      </div>
+
+      <div class="sect">
+        <h4>Quality &amp; compliance</h4>
+        <div class="kv"><span class="k">Geo Verification</span>
+          <span class="v ${l.geo_verified ? 'ok' : 'warn'}">${l.geo_verified === true ? 'Verified' : l.geo_verified === false ? 'Failed' : 'Not Provided'}</span></div>
+        <div class="kv"><span class="k">Approx distance</span>
+          <span class="v">${l.distance_km == null ? '—' : esc(l.distance_km) + ' Km'}</span></div>
+      </div>
+
+      <div class="sect">
+        <h4>Commercial terms</h4>
+        <div class="kv"><span class="k">Dispatch Window</span>
+          <span class="v">${esc(l.dispatch_window || 'TBD')}</span></div>
+        <div class="kv"><span class="k">Logistic Cost</span>
+          <span class="v">${esc(l.logistic_cost)}</span></div>
+      </div>
+
+      <div class="tail"></div>
+    </div>
+
+    <p class="err" id="err"></p>
+    <div class="actions">
+      <button class="reject" id="reject">${I.cross} Exclude Lot</button>
+      <button class="approve" id="approve">${I.check} Approve Lot</button>
+    </div>`;
+
+  const t = document.querySelector('.thumbs');
+  if (t) t.onclick = (e) => {
+    const img = e.target.closest('[data-ph]');
+    if (!img) return;
+    photo = Number(img.dataset.ph);
+    card();
+  };
+  $('#close').onclick = closeWindow;
+  $('#reject').onclick = () => decide('excluded');
+  $('#approve').onclick = () => decide('approved');
+}
+
+async function decide(decision) {
+  if (busy) return;
+  busy = true;
+  const lot = LOTS[idx];
+  $('#reject').disabled = $('#approve').disabled = true;
+  try {
+    const out = await post(`/api/seller/lots/${encodeURIComponent(lot.id)}/decide`, { decision });
+    DECISIONS = out.decisions;
+    busy = false;
+    photo = 0;
+    const next = nextUndecided(idx + 1);
+    if (next === -1) return summary();
+    idx = next;
+    // Each card starts at the top - a half-scrolled next lot reads as the same lot.
+    window.scrollTo(0, 0);
+    card();
+  } catch (e) {
+    busy = false;
+    if (String(e.body && e.body.error).startsWith('session_')) return signedOut(e.body.error);
+    $('#err').textContent = (e.body && e.body.error) || e.message;
+    $('#reject').disabled = $('#approve').disabled = false;
+  }
+}
+
+function summary() {
+  const approved = LOTS.filter((l) => DECISIONS[l.id] === 'approved');
+  const mt = approved.reduce((s, l) => s + Number(l.quantity_mt), 0);
+  const value = approved.reduce((s, l) => s + Number(l.quantity_mt) * 1000 * Number(l.rate_per_kg), 0);
+
+  $('#shell').innerHTML = `
+    <div class="summary">
+      <div class="tick">${I.big}</div>
+      <h2>${approved.length} lot${approved.length === 1 ? '' : 's'} of ${mt.toFixed(mt < 10 ? 3 : 1)} MT ordered</h2>
+      <p>${approved.length
+        ? bigMoney(value) + ' in total · our team will confirm each pickup with you.'
+        : 'You excluded every lot. Nothing has been ordered.'}</p>
+      ${approved.length ? `<div class="sumlist">${approved.map((l) => `
+        <div class="kv">
+          <span class="k">${esc(l.seller)}<br><span style="color:var(--faint);font-weight:500">${esc(l.material)}</span></span>
+          <span class="v">${esc(l.quantity_mt)} MT<br>₹${inr(l.rate_per_kg)}/kg</span>
+        </div>`).join('')}</div>` : ''}
+      <button class="closebtn" id="close2">Close</button>
+      <button class="startover" id="startover">Review these lots again</button>
+    </div>`;
+
+  $('#close2').onclick = closeWindow;
+  $('#startover').onclick = async () => {
+    await post('/api/seller/lots/reset');
+    load();
+  };
+}
+
+/**
+ * A tab the buyer opened from WhatsApp wasn't opened by script, so window.close()
+ * is refused by every browser here. Try it anyway for the cases where it works
+ * (the WhatsApp in-app webview being the one that matters), then fall back to a
+ * plain "you can close this tab" state rather than a button that does nothing.
+ */
+function closeWindow() {
+  window.close();
+  setTimeout(() => {
+    if (document.hidden) return;
+    $('#shell').innerHTML = `
+      <div class="msg">
+        <h3>All done</h3>
+        <p>You can close this tab and go back to WhatsApp.</p>
+      </div>`;
+  }, 250);
+}
+
+async function load() {
+  const res = await fetch('/api/seller/lots');
+  if (!res.ok) {
+    const b = await res.json().catch(() => ({}));
+    if (String(b.error || '').startsWith('wrong_intent')) return (location.href = '/land.html' + location.search);
+    return signedOut(b.state || b.error);
+  }
+  const data = await res.json();
+  LOTS = data.lots || [];
+  DECISIONS = data.decisions || {};
+  photo = 0;
+  if (!LOTS.length) {
+    $('#shell').innerHTML = '<div class="msg"><h3>No lots right now</h3><p>We\'ll message you when new lots come in.</p></div>';
+    return;
+  }
+  const next = nextUndecided(0);
+  if (next === -1) return summary();
+  idx = next;
+  card();
+}
+
+load();
+</script>
+</body>
+</html>
