@@ -69,16 +69,16 @@ const TEMPLATES = {
  * MSG91 ignores names and uses order. So we carry both, and each adapter takes
  * what it needs. Flag the URL button's parameter with button:true.
  */
+const fill = (text, vars) =>
+  String(text == null ? '' : text).replace(/\{\{(\w+)\}\}/g, (m, k) => (vars[k] == null ? m : String(vars[k])));
+
 function resolveParams(list, vars) {
   return (list || [])
     .filter((p) => p && p.name)
     .map((p) => ({
       name: String(p.name),
       button: !!p.button,
-      value: String(p.value == null ? '' : p.value).replace(
-        /\{\{(\w+)\}\}/g,
-        (m, k) => (vars[k] == null ? m : String(vars[k]))
-      )
+      value: fill(p.value, vars)
     }));
 }
 
@@ -90,16 +90,16 @@ async function sendTemplate({ seller, intent, resource, secret, baseUrl, note, s
   const providerKey = opts.provider || process.env.SEND_PROVIDER || 'simulate';
   const mode = opts.mode || process.env.SEND_MODE || 'text';
   const templateId = opts.template || process.env['TEMPLATE_' + intent.key.toUpperCase()] || '';
-  const bodyText = tpl.body(resource);
 
   // A campaign token is scoped to the seller, not a listing, so material and
   // rate come from that seller's own first listing / open bid.
   const d0 = db();
   const firstListing = d0.listings.find((l) => l.seller_id === seller.id);
   const firstBid = d0.bids.find((b) => b.seller_id === seller.id && b.status === 'open');
+  const profile = seller.profile || {};
 
-  // Placeholders usable in any parameter value.
-  const params = resolveParams(opts.params, {
+  // Placeholders usable in any parameter value, and in an overridden body.
+  const vars = {
     token: secret,
     url: url,
     name: seller.name,
@@ -109,9 +109,16 @@ async function sendTemplate({ seller, intent, resource, secret, baseUrl, note, s
     title: resource.title || resource.id || '',
     amount: resource.amount == null ? '' : String(resource.amount),
     buyer: resource.buyer || '',
+    company: profile.company || seller.name || '',
+    // What the onboarding-complete template shows as "your customer ID". Seeded
+    // test users have no signup row, so they fall back to their internal id.
+    cust_id: seller.cust_id || String(seller.id || '').toUpperCase(),
     // Material name without the tonnage/location prefix, e.g. "PET bottles".
+    // A signup has no listings at all, so their chosen material is the fallback -
+    // otherwise every onboarding broadcast would say "scrap".
     material: (() => {
-      const t = (resource.title || (firstListing && firstListing.title) || 'scrap').split(' - ')[0];
+      const raw = resource.title || (firstListing && firstListing.title) || profile.material || 'scrap';
+      const t = String(raw).split(' - ')[0];
       return t.replace(/^[\d.]+\s*MT\s*/i, '').trim() || 'scrap';
     })(),
     // Per-kg rate, because the approved template says "per kg". Bid amounts are
@@ -121,9 +128,11 @@ async function sendTemplate({ seller, intent, resource, secret, baseUrl, note, s
         ? resource.rate_per_kg
         : firstListing && firstListing.rate_per_kg != null
           ? firstListing.rate_per_kg
-          : firstBid
-            ? firstBid.amount
-            : ''
+          : profile.last_rate != null
+            ? profile.last_rate
+            : firstBid
+              ? firstBid.amount
+              : ''
     ),
     // For omp_test_buyer_check_lots: "{{num}} lots totaling {{qty}} MT for
     // {{mat}}". Counts only what this buyer has not decided on yet, so the
@@ -140,16 +149,27 @@ async function sendTemplate({ seller, intent, resource, secret, baseUrl, note, s
         lot_material: top ? top[0] : 'scrap'
       };
     })()
-  });
+  };
+
+  const params = resolveParams(opts.params, vars);
+
+  // Several broadcasts share one intent - approval and the daily price nudge both
+  // open the price screen, so both ride the /s/{{1}} base and the one template
+  // approved against it. Only the words differ, so the caller may override them.
+  // Under `template` mode this text is for the console's bubble; what actually
+  // reaches the handset is the approved body plus these parameters.
+  const copy = opts.copy || {};
+  const bodyText = copy.body ? fill(copy.body, vars) : tpl.body(resource);
+  const buttonLabel = copy.button || tpl.button;
 
   const msg = {
     id: 'm_' + crypto.randomBytes(6).toString('hex'),
     at: now(),
     wa_id: seller.wa_id,
     seller_id: seller.id,
-    template: mode === 'template' ? templateId || '(none given)' : tpl.name,
+    template: mode === 'template' ? templateId || '(none given)' : copy.name || tpl.name,
     body: bodyText,
-    button_label: tpl.button,
+    button_label: buttonLabel,
     url,
     intent: intent.key,
     resource_id: resource.id,
@@ -168,7 +188,7 @@ async function sendTemplate({ seller, intent, resource, secret, baseUrl, note, s
 
   if (providerKey === 'simulate') {
     msg.provider_ok = true;
-    logEvent('whatsapp.sent', `Simulated ${tpl.name} to +${seller.wa_id}`, {
+    logEvent('whatsapp.sent', `Simulated ${msg.template} to +${seller.wa_id}`, {
       message_id: msg.id,
       seller_id: seller.id
     });

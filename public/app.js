@@ -286,6 +286,123 @@ function renderSendSettings() {
   }
 }
 
+/* ------------------------------ signups --------------------------------- */
+
+// Which captured numbers the next broadcast goes to. Held here rather than read
+// off the checkboxes, because the panel is redrawn every two seconds and the
+// selection has to survive that.
+const selected = new Set();
+// seller_id -> what the provider said about the last broadcast to them.
+const bcastResults = new Map();
+let lastBroadcast = '';
+
+const tplFor = (key, fallback) => localStorage.getItem('bcast.tpl.' + key) || fallback;
+
+function renderSignups() {
+  const el = $('#signups');
+  // Never rip the DOM out from under someone typing a template name.
+  if (el.contains(document.activeElement) && document.activeElement.tagName === 'INPUT'
+      && document.activeElement.type === 'text') return;
+
+  const rows = state.signups || [];
+  const casts = state.broadcasts || [];
+  for (const id of [...selected]) if (!rows.some((r) => r.id === id)) selected.delete(id);
+
+  const joinRow = `
+    <div class="row small" style="margin-bottom:10px">
+      <span class="muted">public onboarding link</span>
+      <span class="mono" style="color:var(--blue);word-break:break-all">${esc(state.join_url || '/join')}</span>
+      <button class="tiny" data-copy-url="${esc(state.join_url || '')}">copy</button>
+      <a class="small" href="${esc(state.join_url || '/join')}" target="_blank" rel="noopener">open</a>
+    </div>`;
+
+  if (!rows.length) {
+    el.innerHTML = joinRow +
+      `<p class="muted small" style="margin-bottom:0">
+         Nobody has signed up yet. Open the link above, finish the flow, and the number appears here.
+       </p>`;
+    return;
+  }
+
+  const approved = rows.filter((r) => r.status === 'approved').length;
+  const allOn = rows.every((r) => selected.has(r.id));
+
+  el.innerHTML = joinRow + `
+    <div class="row small" style="justify-content:space-between;margin-bottom:8px">
+      <label class="row small" style="gap:6px">
+        <input type="checkbox" id="selAll" ${allOn ? 'checked' : ''} />
+        <span>select all</span>
+      </label>
+      <span class="muted">${rows.length} captured &middot; ${approved} approved &middot; ${selected.size} selected</span>
+    </div>` +
+    rows
+      .map(
+        (r) => `
+      <div class="card" style="padding:10px 12px">
+        <div class="row small" style="justify-content:space-between">
+          <label class="row small" style="gap:8px;min-width:0">
+            <input type="checkbox" data-pick="${esc(r.id)}" ${selected.has(r.id) ? 'checked' : ''} />
+            <span><strong>${esc(r.name)}</strong> <span class="muted">+${esc(r.wa_id)}</span></span>
+          </label>
+          <span class="pill ${r.status === 'approved' ? 'active' : ''}">${esc(r.status)}</span>
+        </div>
+        <div class="small muted" style="margin-top:4px">
+          <span class="mono">${esc(r.cust_id || r.id)}</span> &middot;
+          ${esc(r.company || 'no business name')} &middot;
+          ${r.docs_submitted_at ? 'docs in' : '<span style="color:var(--warn)">docs pending</span>'} &middot;
+          ${esc(r.material || 'no material yet')}${r.last_rate ? ' @ ₹' + r.last_rate + '/kg' : ''} &middot;
+          signed up ${rel(r.signed_up_at)} &middot; opened ${r.opened}×
+        </div>
+        <div class="row small" style="margin-top:6px">
+          <button class="tiny" data-copy-url="${esc(r.url || '')}">copy portal link</button>
+          <a class="small" href="${esc(r.url || '#')}" target="_blank" rel="noopener">open</a>
+        </div>
+        ${(() => {
+          const last = bcastResults.get(r.id);
+          return last ? `<div class="small ${last.ok ? 'ok' : 'err'}">${esc(last.text)}</div>` : '';
+        })()}
+      </div>`
+      )
+      .join('') + `
+    <div class="card">
+      <div class="small muted" style="margin-bottom:8px">
+        Broadcast to the selected numbers, one send each, through the provider and mode above.
+      </div>
+      ${casts
+        .map(
+          (b) => `
+        <div style="margin-bottom:10px">
+          <button class="tiny primary" data-broadcast="${esc(b.key)}" style="width:100%">${esc(b.label)}</button>
+          <div class="row small" style="margin-top:4px;flex-wrap:nowrap">
+            <input class="mono" style="flex:1;min-width:0;padding:3px 8px"
+                   data-tpl-for="${esc(b.key)}" value="${esc(tplFor(b.key, b.template))}" />
+            <span class="muted" style="white-space:nowrap">${esc(b.intent)}</span>
+          </div>
+        </div>`
+        )
+        .join('')}
+      <p class="small muted" style="margin:8px 0 0">
+        Template names apply to <em>template</em> mode only. Free text and simulate use each
+        broadcast's own wording, so all three work before anything is approved.
+      </p>
+      <div class="small" id="bcastOut" style="margin-top:6px">${esc(lastBroadcast)}</div>
+    </div>`;
+
+  $('#selAll').onchange = (e) => {
+    rows.forEach((r) => (e.target.checked ? selected.add(r.id) : selected.delete(r.id)));
+    renderSignups();
+  };
+  el.querySelectorAll('[data-pick]').forEach((c) => {
+    c.onchange = () => {
+      c.checked ? selected.add(c.dataset.pick) : selected.delete(c.dataset.pick);
+      renderSignups();
+    };
+  });
+  el.querySelectorAll('[data-tpl-for]').forEach((i) => {
+    i.oninput = () => localStorage.setItem('bcast.tpl.' + i.dataset.tplFor, i.value);
+  });
+}
+
 function renderCampaign() {
   const rows = state.campaign || [];
   $('#campaign').innerHTML =
@@ -417,6 +534,7 @@ function renderEvents() {
 function renderAll() {
   renderClock();
   renderSendSettings();
+  renderSignups();
   renderCampaign();
   renderSellers();
   renderIntents();
@@ -490,6 +608,48 @@ document.addEventListener('click', async (ev) => {
     } catch (err) {
       out.className = 'small err';
       out.textContent = err.body ? JSON.stringify(err.body) : err.message;
+    }
+    t.disabled = false;
+    return refresh();
+  }
+
+  if (t.dataset.broadcast) {
+    const ids = [...selected];
+    if (!ids.length) return alert('Pick at least one number first.');
+
+    const def = (state.broadcasts || []).find((b) => b.key === t.dataset.broadcast);
+    const out = $('#bcastOut');
+    t.disabled = true;
+    out.className = 'small muted';
+    out.textContent = `sending to ${ids.length} number(s) via ${send.provider}…`;
+
+    try {
+      const r = await api('/api/campaign/broadcast', {
+        method: 'POST',
+        body: JSON.stringify({
+          broadcast: def.key,
+          seller_ids: ids,
+          provider: send.provider,
+          mode: send.mode,
+          template: tplFor(def.key, def.template)
+          // params deliberately omitted: each broadcast's own parameter names
+          // travel with it on the server, so the shared params box - which
+          // belongs to the rate template - can't corrupt them.
+        })
+      });
+      lastBroadcast = `${def.label}: ${r.sent} sent, ${r.failed} failed`;
+      // Kept per recipient, because a provider will happily accept nine and drop
+      // one - and held in state, not in the DOM, so the 2s refresh doesn't erase
+      // the only evidence of which one it dropped.
+      for (const one of r.results) {
+        bcastResults.set(one.seller_id, {
+          ok: one.ok,
+          text: `${def.label} → ${one.ok ? 'accepted' : 'failed'} ` +
+            `${one.status == null ? '' : 'HTTP ' + one.status} ${String(one.response || '').slice(0, 120)}`
+        });
+      }
+    } catch (err) {
+      lastBroadcast = err.body ? JSON.stringify(err.body) : err.message;
     }
     t.disabled = false;
     return refresh();

@@ -8,7 +8,8 @@ npm install
 npm start      # http://localhost:3000
 ```
 
-Sign in as `ops@test.local` / `ops1234`.
+Sign in as `ops@test.local` / `ops1234`. New buyers come in at
+[`/join`](#the-onboarding-funnel), which needs no login at all.
 
 ## Three seller logins, isolated
 
@@ -22,6 +23,100 @@ Sign in as `ops@test.local` / `ops1234`.
 Isolation is enforced server-side, not in the browser: a seller's bearer token gets
 `not_your_resource` / `not_your_profile` / `not_your_token` on anyone else's data, and
 `ops_only` on the clock and reset. Hand-made requests don't get further than the UI does.
+
+## The onboarding funnel
+
+A second way in, for people who are not seeded test users and have never messaged
+you: **`/join`**, a public page with no token and no session. Four screens —
+name and number, OTP, business name and documents, done.
+
+The last screen has **no login button**. There is nothing to sign in to yet, and
+the next thing that happens is a message from us:
+
+> Your part is done. We'll get back to you as soon as your account is approved.
+> You can close WhatsApp now.
+
+**The number is captured when the OTP checks out, not at the end.** Someone who
+verifies and then abandons the documents screen is still a lead, and dropping
+them would waste the only expensive part of the funnel. The set is deduplicated
+by number — `+91 98123 45670`, `9812345670` and `919812345670` are one row.
+
+The OTP is a fixed mock (`987654`, override with `SIGNUP_OTP`). A real one needs
+an approved authentication template *and* a number already opted in, which would
+dead-end every demo at the second screen.
+
+### A signup is a user
+
+Each one gets a real user row and the same derived permanent tokens as `s1`–`s3`,
+so the whole existing machine — `/s/{{1}}`, `/lots/{{1}}`, the provider adapters,
+the scoped sessions, the token ledger — works on them with no special case. They
+are kept out of the *Test users* and *Campaign links* panels and given their own
+**Signups** panel, because those two lists would otherwise grow without limit.
+
+### Three broadcasts, fired by hand
+
+The Signups panel has checkboxes and three buttons. Each sends one message per
+recipient, sequentially, through whichever provider and mode is set above — so
+every recipient gets their own ledger row with its own raw request and response.
+A provider will happily accept nine and drop one, and per-recipient evidence is
+the only way to see it.
+
+| Button | Intent / base | Template | What it does |
+|---|---|---|---|
+| Approve & notify | `seller_portal` → `/s/{{1}}` | `omp_test_buyer_newlyonboard` | flips the signup to **approved**, but only after the send succeeds |
+| Send lots | `lot_select` → `/lots/{{1}}` | `omp_test_buyer_check_lots` | the existing lot deck |
+| Send price nudge | `seller_portal` → `/s/{{1}}` | `omp_test_token_buyer1` | the daily nudge |
+
+Approval and the nudge share one base and one intent, because both open the price
+screen — only the words differ, and the copy lives in
+[src/broadcasts.js](src/broadcasts.js) rather than in the console.
+
+The nudge needs **nothing new approved**: the rate-confirmation template already
+in use reads as a daily nudge almost word for word — *"your recent {{mat}} buying
+rate was Rs {{price}} per kg, confirm rate change if any"* — and `{{rate}}` now
+falls back to the buyer's last posted price, which a signup has and a listing
+doesn't. Names are editable per broadcast in the panel.
+
+The approval template declares three named variables and one frozen base:
+
+```
+omp_test_buyer_newlyonboard        UTILITY
+  Hi {{1}}, Your onboarding with Recykal.Market is complete -
+  {{2}} is your customer ID.
+  button "Start Buying" -> https://whatsapp-link-harness.onrender.com/s/{{1}}
+  names: name -> body {{1}} · custID -> body {{2}} · 1 -> the button
+```
+
+`custID` is why a signup carries a `cust_id` (`RM10001`, `RM10002`, …) alongside
+its internal `sg1`: the message shows it to the buyer as their customer ID, and
+`sg1` does not read like one. It's on each row in the Signups panel.
+
+Note the button base — a template's URL is frozen at approval, so this one only
+works from `whatsapp-link-harness.onrender.com`. Sending it from a tunnel or from
+localhost still delivers, but the button lands on the deployed origin.
+
+### First run in the portal
+
+A buyer who arrived this way has `material: null`, so the portal opens on a
+material picker instead of the price screen — asking *"at what price will you buy
+___"* needs something in the blank. Only **PET Bottle Scrap Baled - Clear** is
+selectable; the rest of the catalogue is shown greyed as *coming soon*, because
+the catalogue is the point. Everything else (location, payment days, need-by, min
+rating) is defaulted and editable inline on the price screen, so the first run is
+one tap plus a price.
+
+The greyed cards are a courtesy, not the control: `POST /api/seller/profile`
+validates against [src/materials.js](src/materials.js), so a hand-made request
+cannot set a material we don't trade.
+
+### The whole loop
+
+```
+/join  → number captured → docs → "we'll get back to you"
+       → ops: Approve & notify  → WhatsApp → /s/<token> → pick PET Clear → post price
+       → ops: Send lots         → WhatsApp → /lots/<token> → approve lots → order
+       → ops: Send price nudge  → WhatsApp → /s/<token> → confirm or change the price
+```
 
 ## Permanent campaign links
 
@@ -203,10 +298,14 @@ src/intents.js         ceilings, renewability, step-up, thresholds
 src/tokens.js          issue / redeem / revoke / kill switch
 src/auth.js            bearer JWT + scoped sliding session
 src/whatsapp.js        simulated template send
+src/signup.js          the captured set: capture, dedupe, documents, approval
+src/materials.js       what we trade, and a new buyer's defaults
+src/broadcasts.js      the three onboarding messages and their copy
 src/routes/api.js      ops console API (bearer)
 src/routes/link.js     /s/:token, resend, dead-link context
 src/routes/seller.js   scoped seller actions (session cookie)
-public/                console, landing page, dead-link page
+src/routes/signup.js   /join's API - public, unauthenticated
+public/                console, onboarding, portal, lot deck, dead-link page
 ```
 
 ## API quick reference
@@ -219,11 +318,19 @@ POST /api/tokens/:id/revoke   bearer
 POST /api/dev/clock           bearer; {advance_ms} | {reset:true}
 POST /api/dev/reset           bearer; reseed
 
+POST /api/campaign/broadcast  bearer, ops; {broadcast,seller_ids[]} -> one send each
+
+POST /api/signup/otp          public; {phone} -> mock code
+POST /api/signup/verify       public; {phone,code,name} -> captures the number
+POST /api/signup/documents    public; {id,ticket,company,docs} -> KYC submitted
+GET  /api/signup/status       public; ?phone= -> has this handset been through?
+
 GET  /s/:token                redeem -> 302 /land.html or /expired.html
 GET  /api/link/context?t=     dead-link page copy
 POST /api/link/resend         {t} -> new token for the same task
 
 GET  /api/session             session cookie; scope + time left (does not slide)
+POST /api/seller/profile      session; {material} -> first-run material
 POST /api/seller/listings/:id/draft|publish|pickup
 POST /api/seller/bids/:id/accept|reject
 POST /api/seller/kyc/:id/otp|verify|submit

@@ -32,6 +32,8 @@ app.use(express.static(path.join(__dirname, 'public'), { index: 'index.html', ex
 app.use(require('./src/routes/api'));
 app.use(require('./src/routes/link'));
 app.use(require('./src/routes/seller'));
+// Public and unauthenticated on purpose: /join is for people we have never seen.
+app.use(require('./src/routes/signup'));
 
 app.use((req, res) => res.status(404).json({ error: 'not_found', path: req.path }));
 
@@ -54,5 +56,6 @@ process.on('uncaughtException', (err) => {
 app.listen(PORT, () => {
   console.log(`\n  WhatsApp link-token harness`);
   console.log(`  console : http://localhost:${PORT}/`);
+  console.log(`  join    : http://localhost:${PORT}/join`);
   console.log(`  login   : ops@test.local / ops1234\n`);
 });

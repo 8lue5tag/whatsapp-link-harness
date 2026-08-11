@@ -8,6 +8,7 @@ const { INTENTS, OTP_FRESH_MS } = require('../intents');
 const { requireSession, requireFreshOtp, sessionState, SESSION_COOKIE } = require('../auth');
 const { revokeForResource, logEvent, resourceFor } = require('../tokens');
 const { allLots, decisionsFor, recordDecision, clearDecisions, placeOrder, orderFor } = require('../lots');
+const { SUPPORTED, COMING_SOON, isSupported } = require('../materials');
 
 const router = express.Router();
 router.use(express.json());
@@ -77,6 +78,11 @@ router.get('/api/session', (req, res) => {
     // A task link gets exactly its one resource. A portal link gets the
     // seller's own everything - and still nothing belonging to anyone else.
     resource: portal ? null : resourceFor(intent, session.resource_id),
+    // A buyer who came through onboarding has never chosen a material, so the
+    // portal opens on the picker instead of the price screen. The catalogue is
+    // sent along with the flag so the page never has to hard-code what we trade.
+    first_run: portal ? !(seller.profile && seller.profile.material) : false,
+    materials: portal ? { supported: SUPPORTED, coming_soon: COMING_SOON } : null,
     own: portal
       ? {
           profile: seller.profile || null,
@@ -91,6 +97,36 @@ router.get('/api/session', (req, res) => {
     absolute_ms_left: session.absolute_expires_at - now(),
     otp_fresh: !!session.otp_verified_at && now() - session.otp_verified_at <= OTP_FRESH_MS
   });
+});
+
+/* --------------------------- first-run material -------------------------- */
+
+/**
+ * The one thing a brand-new buyer has to set before the price screen means
+ * anything. Their profile arrives from onboarding with `material: null`, and this
+ * is what fills it in.
+ *
+ * Validated against the catalogue server-side, so a hand-made request cannot set
+ * a material we don't actually trade - the greyed-out cards on the picker are a
+ * courtesy, not the control.
+ */
+router.post('/api/seller/profile', requireSession, (req, res) => {
+  if (req.session.intent !== 'seller_portal') {
+    return res.status(403).json({ error: 'wrong_intent', have: req.session.intent, need: 'seller_portal' });
+  }
+
+  const material = String((req.body && req.body.material) || '');
+  if (!isSupported(material)) {
+    return res.status(409).json({ error: 'unsupported_material', supported: SUPPORTED });
+  }
+
+  const seller = db().users.find((u) => u.id === req.session.seller_id);
+  seller.profile = seller.profile || {};
+  seller.profile.material = material;
+  save();
+
+  logEvent('profile.material', `${seller.name} set their material to ${material}`, { seller_id: seller.id });
+  res.json({ ok: true, profile: seller.profile });
 });
 
 /* ------------------------- buying rate (portal) ------------------------- */

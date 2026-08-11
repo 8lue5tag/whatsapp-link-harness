@@ -79,6 +79,8 @@ input, textarea, select {
   padding: 8px 10px;
   width: 100%;
 }
+/* The 100% above is for text fields; a checkbox that obeys it fills its row. */
+input[type="checkbox"] { width: auto; padding: 0; accent-color: var(--accent); }
 
 .grid {
   display: grid;

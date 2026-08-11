@@ -141,6 +141,27 @@
 
     .expired { padding: 40px 18px; text-align: center; }
     .expired h3 { font-size: 22px; font-weight: 800; margin: 0 0 8px; }
+
+    /* First run only: the material picker a brand-new buyer sees before there is
+       any price to ask for. */
+    .mat {
+      width: 100%; text-align: left; display: flex; align-items: center; gap: 13px;
+      border: 1px solid var(--line); border-radius: 14px; background: none;
+      padding: 15px 16px; margin-bottom: 11px; cursor: pointer; font: inherit; color: inherit;
+    }
+    .mat .ico {
+      width: 42px; height: 42px; border-radius: 11px; flex: none; border: 1px solid var(--line);
+      display: grid; place-content: center; color: var(--green); background: #fafbfc;
+    }
+    .mat .n { font-size: 16.5px; font-weight: 700; letter-spacing: -0.01em; }
+    .mat .s { font-size: 13px; color: var(--muted); margin-top: 2px; }
+    .mat.on { border-color: var(--green); box-shadow: 0 0 0 3px rgba(18,129,63,0.10); }
+    .mat.on .ico { background: #e8f5ed; border-color: transparent; }
+    .mat.off { cursor: not-allowed; opacity: 0.5; }
+    .mat.off .ico { color: var(--muted); }
+    .radio { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line); flex: none; display: grid; place-content: center; }
+    .mat.on .radio { border-color: var(--green); background: var(--green); color: #fff; }
+    .soon { font-size: 11.5px; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); }
   </style>
 </head>
 <body>
@@ -165,7 +186,8 @@ const ICONS = {
   star: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="m12 3 2.7 5.6 6.3.9-4.5 4.4 1 6.1-5.5-2.9-5.5 2.9 1-6.1L3 9.5l6.3-.9L12 3Z"/></svg>',
   clock: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
   pencil: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"/></svg>',
-  tick: '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m20 6-11 11-5-5"/></svg>'
+  tick: '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m20 6-11 11-5-5"/></svg>',
+  check: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="m20 6-11 11-5-5"/></svg>'
 };
 
 function greeting(d = new Date()) {
@@ -210,6 +232,65 @@ function row(icon, k, v, editHtml) {
         <div class="v">${editing && editHtml ? editHtml : esc(v)}</div>
       </div>
     </div>`;
+}
+
+/**
+ * First run. A buyer who arrived through onboarding has no material set, so
+ * asking "at what price will you buy ___" has nothing to put in the blank. One
+ * tap fills it, and they never see this screen again.
+ *
+ * The unsupported materials are shown rather than hidden: the catalogue is the
+ * point, and a buyer should be able to see that the rest is coming.
+ */
+function pickMaterial() {
+  const supported = (S.materials && S.materials.supported) || [];
+  const soon = (S.materials && S.materials.coming_soon) || [];
+  const name = ((S.own.profile || {}).company || S.seller.name || '').toUpperCase();
+  let chosen = supported[0] || null;
+
+  const card = (m, on, ok) => `
+    <button class="mat ${ok ? (on ? 'on' : '') : 'off'}" ${ok ? `data-mat="${esc(m)}"` : 'disabled'}>
+      <div class="ico">${ICONS.layers}</div>
+      <div style="flex:1;min-width:0">
+        <div class="n">${esc(m)}</div>
+        <div class="s">${ok ? 'Live now &middot; lots available today' : 'Coming soon'}</div>
+      </div>
+      ${ok ? `<div class="radio">${on ? ICONS.check : ''}</div>` : '<span class="soon">Soon</span>'}
+    </button>`;
+
+  const draw = () => {
+    $('#root').innerHTML = `
+      <div class="eyebrow"><span class="dot"></span>Welcome to the marketplace</div>
+      <h2 class="greet">${esc(greeting())}, ${esc(name)}.</h2>
+      <p class="ask">Before your first price — <em>which material do you buy?</em></p>
+      <p class="sub" style="margin:-6px 0 18px">
+        This becomes your default. You can change it any time from your profile.
+      </p>
+      ${supported.map((m) => card(m, m === chosen, true)).join('')}
+      ${soon.map((m) => card(m, false, false)).join('')}
+      <button class="cta" id="go" ${chosen ? '' : 'disabled'}>Continue &nbsp;&rarr;</button>
+      <p class="err" id="err"></p>
+      <p class="foot">One tap now, and we'll never ask again.</p>`;
+
+    document.querySelectorAll('[data-mat]').forEach((b) => {
+      b.onclick = () => { chosen = b.dataset.mat; draw(); };
+    });
+
+    $('#go').onclick = async () => {
+      $('#go').disabled = true;
+      $('#err').textContent = '';
+      try {
+        await post('/api/seller/profile', { material: chosen });
+        return load();
+      } catch (e) {
+        if (String(e.body && e.body.error).startsWith('session_')) return expired(e.body.error);
+        $('#err').textContent = (e.body && e.body.error) || e.message;
+        $('#go').disabled = false;
+      }
+    };
+  };
+
+  draw();
 }
 
 function render() {
@@ -325,6 +406,8 @@ async function load() {
   S = await res.json();
   if (S.intent !== 'seller_portal') return (location.href = '/land.html' + location.search);
   editing = false;
+  // No material yet means this buyer came straight from onboarding.
+  if (S.first_run) return pickMaterial();
   render();
 }
 

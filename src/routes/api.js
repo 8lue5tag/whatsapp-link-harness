@@ -8,6 +8,8 @@ const { issueToken, revokeToken, sweep, logEvent, resourceFor, ownerOf } = requi
 const { issueBearer, requireBearer } = require('../auth');
 const { sendTemplate, sendMode } = require('../whatsapp');
 const { campaignLinks, campaignSecretFor, ensureCampaignTokens } = require('../campaign');
+const { BROADCASTS } = require('../broadcasts');
+const { allSignups, markApproved } = require('../signup');
 
 const router = express.Router();
 router.use(express.json());
@@ -61,6 +63,13 @@ router.get('/api/me', requireBearer, (req, res) => {
 router.get('/api/state', requireBearer, (req, res) => {
   sweep();
   const d = db();
+
+  // Signups get their own panel, so they are kept out of the seeded test-user
+  // and campaign lists - otherwise both grow without limit as a demo runs.
+  const links = campaignLinks(baseUrl(req), isOps(req.user) ? null : [req.user.id]);
+  const signupIds = new Set(allSignups().map((u) => u.id));
+  const linkFor = new Map(links.map((c) => [c.seller_id, c]));
+
   res.json({
     now: clock.now(),
     clock_offset_ms: clock.getOffset(),
@@ -83,12 +92,45 @@ router.get('/api/state', requireBearer, (req, res) => {
       see_all_sellers: isOps(req.user),
       end_any_session: isOps(req.user)
     },
-    users: mine(req.user, d.users, 'id').map((u) => ({
-      id: u.id,
-      name: u.name,
-      role: u.role,
-      wa_id: u.wa_id,
-      city: u.city
+    users: mine(req.user, d.users, 'id')
+      .filter((u) => !u.signup)
+      .map((u) => ({
+        id: u.id,
+        name: u.name,
+        role: u.role,
+        wa_id: u.wa_id,
+        city: u.city
+      })),
+    // The captured set. One row per number, in signup order, each already
+    // carrying the permanent link the approval blast will send.
+    signups: isOps(req.user)
+      ? allSignups().map((u) => ({
+          id: u.id,
+          // Shown because the approval message tells the buyer this is their
+          // customer ID, so ops needs to be able to find it here.
+          cust_id: u.cust_id || null,
+          name: u.name,
+          company: u.company,
+          wa_id: u.wa_id,
+          status: u.status,
+          signed_up_at: u.signed_up_at,
+          approved_at: u.approved_at,
+          docs: u.docs,
+          docs_submitted_at: u.docs_submitted_at,
+          material: (u.profile && u.profile.material) || null,
+          last_rate: (u.profile && u.profile.last_rate) || null,
+          url: (linkFor.get(u.id) || {}).url || null,
+          lots_url: (linkFor.get(u.id) || {}).lots_url || null,
+          opened: (linkFor.get(u.id) || {}).use_count || 0
+        }))
+      : [],
+    broadcasts: Object.values(BROADCASTS).map((b) => ({
+      key: b.key,
+      label: b.label,
+      intent: b.intent,
+      template: b.template,
+      params: b.params,
+      approves: !!b.approves
     })),
     requirements: mine(req.user, d.requirements || []),
     listings: mine(req.user, d.listings),
@@ -103,7 +145,8 @@ router.get('/api/state', requireBearer, (req, res) => {
     events: isOps(req.user)
       ? d.events.slice(0, 60)
       : d.events.filter((e) => JSON.stringify(e.meta || {}).includes(req.user.id)).slice(0, 60),
-    campaign: campaignLinks(baseUrl(req), isOps(req.user) ? null : [req.user.id])
+    campaign: links.filter((c) => !signupIds.has(c.seller_id)),
+    join_url: `${baseUrl(req)}/join`
   });
 });
 
@@ -274,6 +317,78 @@ router.post('/api/campaign/send', requireBearer, wrap(async (req, res) => {
     send_mode: msg.send_mode,
     status: msg.provider_status,
     response: msg.provider_response
+  });
+}));
+
+/**
+ * One of the three onboarding messages, to a chosen set of signups.
+ *
+ * Deliberately a loop over the same sendTemplate that a single send uses, rather
+ * than a bulk provider API: every recipient gets their own row in the ledger with
+ * its own raw request and response, which is the only way to see that a provider
+ * accepted twenty and delivered nineteen.
+ *
+ * Sends are sequential on purpose. Providers rate-limit, and a burst of parallel
+ * posts is the fastest way to turn a working broadcast into a wall of 429s.
+ */
+router.post('/api/campaign/broadcast', requireBearer, requireOps, wrap(async (req, res) => {
+  const { broadcast, seller_ids, provider, mode, template, params } = req.body || {};
+  const def = BROADCASTS[broadcast];
+  if (!def) return res.status(409).json({ error: 'unknown_broadcast' });
+
+  const ids = Array.isArray(seller_ids) ? seller_ids : [];
+  if (!ids.length) return res.status(400).json({ error: 'no_recipients' });
+
+  ensureCampaignTokens();
+  const intent = INTENTS[def.intent];
+  const results = [];
+
+  for (const id of ids) {
+    const seller = db().users.find((u) => u.id === id && u.role === 'seller');
+    if (!seller) {
+      results.push({ seller_id: id, ok: false, response: 'unknown_seller' });
+      continue;
+    }
+
+    const msg = await sendTemplate({
+      seller,
+      intent,
+      resource: seller,
+      secret: campaignSecretFor(seller.id, def.intent),
+      baseUrl: baseUrl(req),
+      note: def.label,
+      send: {
+        provider,
+        mode,
+        // The console may override the template name - a broadcast's default is
+        // only the name we expect you to have approved.
+        template: template || def.template,
+        params: params && params.length ? params : def.params,
+        copy: def.copy
+      }
+    });
+
+    // Only after the send: "approved" should never be able to mean "we changed a
+    // flag but the message never left".
+    if (def.approves && msg.provider_ok !== false && seller.signup) markApproved(seller);
+
+    results.push({
+      seller_id: seller.id,
+      name: seller.name,
+      wa_id: seller.wa_id,
+      ok: msg.provider_ok !== false,
+      status: msg.provider_status,
+      response: msg.provider_response,
+      url: msg.url
+    });
+  }
+
+  res.json({
+    ok: results.every((r) => r.ok),
+    broadcast: def.key,
+    sent: results.filter((r) => r.ok).length,
+    failed: results.filter((r) => !r.ok).length,
+    results
   });
 }));
 
